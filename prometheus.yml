@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 1s
+  evaluation_interval: 1s
+
+scrape_configs:
+  - job_name: 'actions-runner-monitor'
+    static_configs:
+      - targets: ['app-runner:8080']
+    scrape_interval: 1s
+    metrics_path: /metrics

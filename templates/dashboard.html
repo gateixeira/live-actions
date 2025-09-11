@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Actions - GitHub Actions Runner Monitoring</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <link href="/static/css/dashboard.css" rel="stylesheet">
+    <script src="/static/js/config.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/pagination.js"></script>
+</head>
+<body>
+    <input type="hidden" name="csrf_token" value="{{.csrfToken}}">
+    <script type="application/json" id="dashboard-data">
+    {
+        "csrfToken": "{{.csrfToken}}"
+    }
+    </script>
+    <div class="container">
+        <div class="header-row">
+            <h1 class="header-title">
+                <svg class="github-icon" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                </svg>
+                Live Actions
+            </h1>
+            <div class="theme-toggle">
+                <button class="theme-toggle-btn" id="darkThemeBtn" data-theme="dark">
+                    <svg class="theme-icon-dark" viewBox="0 0 16 16">
+                        <path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/>
+                    </svg>
+                    <span class="theme-text">Dark</span>
+                </button>
+                <button class="theme-toggle-btn" id="lightThemeBtn" data-theme="light">
+                    <svg class="theme-icon-light" viewBox="0 0 16 16">
+                        <path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
+                    </svg>
+                    <span class="theme-text">Light</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="metrics-grid">
+            <div class="metrics-card">
+                <div class="metric-label">Running Jobs</div>
+                <div class="metric-value" id="currentCount">{{.currentRunningTotal}}</div>
+            </div>
+            <div class="metrics-card">
+                <div class="metric-label">Queued Jobs</div>
+                <div class="metric-value" id="currentQueuedCount">{{.currentQueuedCount}}</div>
+            </div>
+            <div class="metrics-card">
+                <div class="metric-label">Avg Queue Time</div>
+                <div class="metric-value" id="avgQueueTime">-</div>
+            </div>
+            <div class="metrics-card">
+                <div class="metric-label">Peak Demand</div>
+                <div class="metric-value" id="peakDemand">{{.peakDemand}}</div>
+                <div class="metric-subtitle" id="peakDemandTimestamp">{{.peakDemandTimestamp}}</div>
+            </div>
+        </div>
+
+        <div class="controls-row">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 12px; color: var(--color-fg-muted); font-weight: 500;">Time Period:</span>
+                <div class="btn-toolbar">
+                    <button class="btn {{if eq .period "hour"}}active{{end}}" data-period="hour">Hour</button>
+                    <button class="btn {{if eq .period "day"}}active{{end}}" data-period="day">Day</button>
+                    <button class="btn {{if eq .period "week"}}active{{end}}" data-period="week">Week</button>
+                    <button class="btn {{if eq .period "month"}}active{{end}}" data-period="month">Month</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container" style="height: 450px;">
+            <canvas id="demandChart"></canvas>
+        </div>
+
+        <!-- Labels Breakdown Section -->
+        <div class="table-breakdown-section">
+            <div class="table-breakdown-header">
+                <h2>Jobs by Label</h2>
+                <small id="labelsLastUpdated" style="color: var(--color-fg-muted); font-size: 11px; margin-right: 8px;">Live data</small>
+            </div>
+            
+            <div class="table-container">
+                <div style="overflow-x: auto;">
+                    <table id="labelsTable" class="table">
+                        <thead>
+                            <tr>
+                                <th>Labels</th>
+                                <th>Running</th>
+                                <th>Queued</th>
+                                <th>Total</th>
+                                <th>Finished</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="labelsTableBody">
+                            <!-- Label rows will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div class="pagination-section" id="labelsPaginationSection" style="display: none;">
+                <div class="pagination-info">
+                    <span id="labelsPaginationInfo">Showing 0 of 0 jobs by label</span>
+                </div>
+                <div class="pagination-controls">
+                    <button id="labelsFirstPage" class="btn btn-sm" disabled>First</button>
+                    <button id="labelsPrevPage" class="btn btn-sm" disabled>Previous</button>
+                    <div class="page-numbers" id="labelsPageNumbers">
+                        <!-- Page numbers will be populated here -->
+                    </div>
+                    <button id="labelsNextPage" class="btn btn-sm" disabled>Next</button>
+                    <button id="labelsLastPage" class="btn btn-sm" disabled>Last</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Runs Table -->
+        <div class="table-breakdown-section">
+            <div class="table-breakdown-header">
+                <h2>Recent Workflow Runs</h2>
+                <div class="table-refresh-btn">
+                    <small id="workflowRunsLastUpdated" style="color: var(--color-fg-muted); font-size: 11px; margin-right: 8px;">Live data</small>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <div style="overflow-x: auto;">
+                    <table id="workflowRunsTable" class="table">
+                    <thead>
+                        <tr>
+                            <th style="width: 20px;"></th>
+                            <th>Build</th>
+                            <th>Name</th>
+                            <th>Repository</th>
+                            <th>Title</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody id="workflowRunsTableBody">
+                        <!-- Workflow runs will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination Controls -->
+            <div class="pagination-section" id="paginationSection" style="display: none;">
+                <div class="pagination-info">
+                    <span id="paginationInfo">Showing 0 of 0 workflow runs</span>
+                </div>
+                <div class="pagination-controls">
+                    <button id="firstPage" class="btn btn-sm" disabled>First</button>
+                    <button id="prevPage" class="btn btn-sm" disabled>Previous</button>
+                    <div class="page-numbers" id="pageNumbers">
+                        <!-- Page numbers will be populated here -->
+                    </div>
+                    <button id="nextPage" class="btn btn-sm" disabled>Next</button>
+                    <button id="lastPage" class="btn btn-sm" disabled>Last</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

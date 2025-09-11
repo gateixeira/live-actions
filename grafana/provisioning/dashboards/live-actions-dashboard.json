@@ -1,0 +1,595 @@
+{
+  "id": null,
+  "title": "GitHub Actions Runners Demand",
+  "tags": ["github", "runners", "monitoring"],
+  "style": "dark",
+  "timezone": "browser",
+  "editable": true,
+  "hideControls": false,
+  "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Running Jobs - Self-Hosted",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "github_runners_jobs{runner_type=\"self-hosted\",job_status=\"running\"}",
+            "legendFormat": "Self-Hosted Running",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 10
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "pluginVersion": "8.0.0",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": 2,
+        "title": "Running Jobs - GitHub-Hosted",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "github_runners_jobs{runner_type=\"github-hosted\",job_status=\"running\"}",
+            "legendFormat": "GitHub-Hosted Running",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 10
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "pluginVersion": "8.0.0",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        }
+      },
+      {
+        "id": 3,
+        "title": "Queued Jobs - Self-Hosted",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "github_runners_jobs{runner_type=\"self-hosted\",job_status=\"queued\"}",
+            "legendFormat": "Self-Hosted Queued",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 3
+                },
+                {
+                  "color": "red",
+                  "value": 8
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "pluginVersion": "8.0.0",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        }
+      },
+      {
+        "id": 4,
+        "title": "Queued Jobs - GitHub-Hosted",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "github_runners_jobs{runner_type=\"github-hosted\",job_status=\"queued\"}",
+            "legendFormat": "GitHub-Hosted Queued",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 3
+                },
+                {
+                  "color": "red",
+                  "value": 8
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "pluginVersion": "8.0.0",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        }
+      },
+      {
+        "id": 5,
+        "title": "Queued Jobs - Unknown",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "github_runners_jobs{runner_type=\"unknown\",job_status=\"queued\"}",
+            "legendFormat": "Unknown Queued",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 3
+                },
+                {
+                  "color": "red",
+                  "value": 8
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "pluginVersion": "8.0.0",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 6,
+        "title": "Running Jobs - Unknown",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "github_runners_jobs{runner_type=\"unknown\",job_status=\"running\"}",
+            "legendFormat": "Unknown Running",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 3
+                },
+                {
+                  "color": "red",
+                  "value": 8
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "pluginVersion": "8.0.0",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 7,
+        "title": "Jobs Over Time by Runner Type",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "github_runners_jobs{runner_type=\"self-hosted\",job_status=\"running\"}",
+            "legendFormat": "Self-Hosted Running",
+            "refId": "A"
+          },
+          {
+            "expr": "github_runners_jobs{runner_type=\"self-hosted\",job_status=\"queued\"}",
+            "legendFormat": "Self-Hosted Queued",
+            "refId": "B"
+          },
+          {
+            "expr": "github_runners_jobs{runner_type=\"github-hosted\",job_status=\"running\"}",
+            "legendFormat": "GitHub-Hosted Running",
+            "refId": "C"
+          },
+          {
+            "expr": "github_runners_jobs{runner_type=\"github-hosted\",job_status=\"queued\"}",
+            "legendFormat": "GitHub-Hosted Queued",
+            "refId": "D"
+          },
+          {
+            "expr": "github_runners_jobs{runner_type=\"unknown\",job_status=\"running\"}",
+            "legendFormat": "Unknown Running",
+            "refId": "E"
+          },
+          {
+            "expr": "github_runners_jobs{runner_type=\"unknown\",job_status=\"queued\"}",
+            "legendFormat": "Unknown Queued",
+            "refId": "F"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Jobs",
+            "show": true
+          },
+          {
+            "show": true
+          }
+        ],
+        "xAxes": [
+          {
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 12
+        },
+        "legend": {
+          "show": true,
+          "values": false,
+          "min": false,
+          "max": false,
+          "current": false,
+          "total": false,
+          "avg": false
+        }
+      },
+      {
+        "id": 8,
+        "title": "Average Queue Time",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "avg(rate(github_runners_queue_duration_seconds_sum[$__rate_interval]) / rate(github_runners_queue_duration_seconds_count[$__rate_interval])) or vector(0)",
+            "legendFormat": "Avg Queue Time",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 60
+                },
+                {
+                  "color": "red",
+                  "value": 300
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "pluginVersion": "8.0.0",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 21
+        }
+      },
+      {
+        "id": 9,
+        "title": "Peak Demand Total",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "max_over_time((sum(github_runners_jobs{job_status=~\"running|queued\"}) or vector(0))[$__range:$__rate_interval])",
+            "legendFormat": "Peak Demand",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 10
+                },
+                {
+                  "color": "red",
+                  "value": 20
+                }
+              ]
+            }
+          }
+        },
+        "options": {
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"],
+            "fields": ""
+          },
+          "orientation": "auto",
+          "textMode": "auto",
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "pluginVersion": "8.0.0",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 21
+        }
+      },
+      {
+        "id": 10,
+        "title": "Queue Duration Histogram by Runner Type",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(github_runners_queue_duration_seconds_bucket{runner_type=\"self-hosted\"}[$__rate_interval])) by (le)",
+            "legendFormat": "Self-Hosted {{ le }}s",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(github_runners_queue_duration_seconds_bucket{runner_type=\"github-hosted\"}[$__rate_interval])) by (le)",
+            "legendFormat": "GitHub-Hosted {{ le }}s",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(rate(github_runners_queue_duration_seconds_bucket{runner_type=\"unknown\"}[$__rate_interval])) by (le)",
+            "legendFormat": "Unknown {{ le }}s",
+            "refId": "C"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Rate",
+            "show": true
+          },
+          {
+            "show": true
+          }
+        ],
+        "xAxes": [
+          {
+            "show": true
+          }
+        ],
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 29
+        },
+        "legend": {
+          "show": true,
+          "values": false,
+          "min": false,
+          "max": false,
+          "current": false,
+          "total": false,
+          "avg": false
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ],
+      "time_options": [
+        "5m",
+        "15m",
+        "1h",
+        "6h",
+        "12h",
+        "24h",
+        "2d",
+        "7d",
+        "30d"
+      ]
+    },
+    "refresh": "30s",
+    "schemaVersion": 27,
+    "version": 1,
+    "links": []
+  }

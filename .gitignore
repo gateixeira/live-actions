@@ -1,0 +1,6 @@
+.DS_Store
+live-actions.db
+data/
+.env
+live-actions
+cover.*

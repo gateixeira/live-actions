@@ -1,0 +1,93 @@
+services:
+  app: &app-base
+    profiles: ["local"]
+    build: .
+    image: live-actions:latest
+    ports:
+      - "${PORT:-8080}:8080"
+    networks:
+      default:
+        aliases:
+          - app-runner
+    environment: &app-env
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - PORT=${PORT:-8080}
+      - DATABASE_URL=${DATABASE_URL}
+      - GIN_MODE=${GIN_MODE:-release}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATA_RETENTION_DAYS=${DATA_RETENTION_DAYS:-30}
+      - CLEANUP_INTERVAL_HOURS=${CLEANUP_INTERVAL_HOURS:-24}
+      - PROMETHEUS_URL=${PROMETHEUS_URL:-http://prometheus:9090}
+      - RUNNER_TYPE_CONFIG_PATH=${RUNNER_TYPE_CONFIG_PATH:-config/runner_types.json}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+
+  app-remote:
+    profiles: ["remote"]
+    image: ghcr.io/gateixeira/live-actions:${TAG:-latest}
+    ports:
+      - "${PORT:-8080}:8080"
+    networks:
+      default:
+        aliases:
+          - app-runner
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+
+  postgres:
+    image: postgres:16.9-bullseye
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-live-actions}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    command: postgres -c max_connections=100 -c shared_buffers=256MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    user: "472"
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:

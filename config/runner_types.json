@@ -1,0 +1,34 @@
+{
+  "self_hosted_labels": [
+    "self-hosted",
+    "self-hosted-large"
+  ],
+  "github_hosted_labels": [
+    "ubuntu-latest",
+    "ubuntu-22.04",
+    "ubuntu-24.04",
+    "ubuntu-20.04",
+    "ubuntu-18.04",
+    "ubuntu-24.04-arm",
+    "ubuntu-22.04-arm",
+    "windows-latest",
+    "windows-2025",
+    "windows-2022",
+    "windows-2019",
+    "windows-11-arm",
+    "macos-latest",
+    "macos-13",
+    "macos-14",
+    "macos-15",
+    "macos-latest-large",
+    "macos-13-large",
+    "macos-14-large",
+    "macos-15-large",
+    "macos-latest-xlarge",
+    "macos-13-xlarge",
+    "macos-14-xlarge",
+    "macos-15-xlarge",
+    "codespaces-prebuild"
+  ],
+  "default_runner_type": "unknown"
+}

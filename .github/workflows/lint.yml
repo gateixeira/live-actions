@@ -1,0 +1,35 @@
+name: Go Linter
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  linter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          check-latest: true
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.8
+
+      - name: Run golangci-lint
+        run: |
+          golangci-lint run ./... --timeout=5m
+
+      - name: Run gofmt
+        run: |
+          gofmt -s -w .
+
+      - name: Run go vet
+        run: |
+          go vet ./...
