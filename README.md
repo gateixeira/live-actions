@@ -25,21 +25,21 @@ An application for live GitHub Actions Job and Runner monitoring integrated with
 - Configurable tracking for GitHub-hosted vs self-hosted runners
 - Visual status for queued, running, completed, and failed jobs
 
-<img width="1378" height="724" alt="live-actions-dashboard" src="https://github.com/user-attachments/assets/40ca0198-994d-4f70-a181-4c30010d9885" />
+![Dashboard](images/dashboard.png)
 
 #### **📋 Workflow Runs Management**
 - Complete history of recent workflow executions with pagination
 - Click to view individual job information for each workflow run
 - Real-time status updates (queued, in_progress, completed, failed)
 
-<img width="1319" height="827" alt="workflow-runs" src="https://github.com/user-attachments/assets/4739bfa3-075a-4ef2-9e62-d4335c9eb370" />
+![Workflows](images/workflows.png)
 
 #### **🏷️ Job Label Analytics**
 - Configurable detection of GitHub-hosted vs self-hosted runners
 - Running, queued, completed, and total counts per label combination
 - Live refresh of label-based metrics
 
-<img width="1315" height="429" alt="jobs-by-label" src="https://github.com/user-attachments/assets/716abeb1-675b-4f89-9b0f-f9cb244fc27e" />
+![Labels](images/labels.png)
 
 #### **⚡ Runner Analytics**
 - Monitor workflow queue times and peak demand periods
@@ -265,7 +265,7 @@ Live Actions exposes comprehensive metrics through a Prometheus-compatible endpo
 
 ### **Built-in Grafana Integration**
 
-<img width="1466" height="1088" alt="live-actions-grafana" src="https://github.com/user-attachments/assets/ef8a4aab-b5d1-4cef-b8df-5650b3d72d35" />
+![Grafana](images/grafana.png)
 
 For demo purposes, when using Docker Compose, Live Actions includes a pre-configured Grafana instance configured to connect to the Prometheus monitoring stack
 
