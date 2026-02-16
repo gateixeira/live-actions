@@ -2,9 +2,7 @@ package handlers
 
 import (
 	"io/fs"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -22,69 +20,6 @@ type DashboardHandler struct {
 
 func NewDashboardHandler(config *config.Config, staticFS fs.FS) *DashboardHandler {
 	return &DashboardHandler{config: config, staticFS: staticFS}
-}
-
-// ValidateDashboardOrigin middleware ensures requests come from the dashboard UI
-func ValidateDashboardOrigin() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		referer := c.Request.Header.Get("Referer")
-		if referer == "" {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Access denied. Missing referer header.",
-			})
-			c.Abort()
-			return
-		}
-
-		// Parse the referer URL
-		refererURL, err := url.Parse(referer)
-		if err != nil {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Access denied. Invalid referer.",
-			})
-			c.Abort()
-			return
-		}
-
-		// Get the request host
-		requestHost := c.Request.Host
-
-		// Compare hostnames (ignore port to support dev proxy setups)
-		refererHostname := refererURL.Hostname()
-		requestHostname := requestHost
-		if h, _, err := net.SplitHostPort(requestHost); err == nil {
-			requestHostname = h
-		}
-
-		if refererHostname != requestHostname {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Access denied. This endpoint can only be accessed from the local dashboard.",
-			})
-			c.Abort()
-			return
-		}
-
-		// Validate CSRF token
-		csrfCookie, err := c.Cookie(utils.CookieName)
-		if err != nil {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Invalid CSRF cookie",
-			})
-			c.Abort()
-			return
-		}
-
-		csrfHeader := c.GetHeader(utils.HeaderName)
-		if csrfHeader == "" || csrfHeader != csrfCookie {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Invalid CSRF token",
-			})
-			c.Abort()
-			return
-		}
-
-		c.Next()
-	}
 }
 
 // Dashboard serves the dashboard HTML page
