@@ -18,12 +18,14 @@ import (
 )
 
 type APIHandler struct {
-	db database.DatabaseInterface
+	db     database.DatabaseInterface
+	config *config.Config
 }
 
 func NewAPIHandler(config *config.Config, db database.DatabaseInterface) *APIHandler {
 	return &APIHandler{
-		db: db,
+		db:     db,
+		config: config,
 	}
 }
 
@@ -61,7 +63,7 @@ func ValidateOrigin() gin.HandlerFunc {
 
 		if refererHostname != requestHostname {
 			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Access denied. This endpoint can only be accessed from the local dashboard.",
+				"error": "Access denied. This endpoint can only be accessed from the application.",
 			})
 			c.Abort()
 			return
@@ -221,6 +223,32 @@ func periodToDuration(period string) time.Duration {
 		return 30 * 24 * time.Hour
 	default:
 		return 24 * time.Hour
+	}
+}
+
+// GetCSRFToken generates a CSRF token, sets it as a cookie, and returns it.
+func (h *APIHandler) GetCSRFToken() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		csrfToken, err := utils.GenerateCSRFToken()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate security token"})
+			return
+		}
+
+		c.SetSameSite(http.SameSiteStrictMode)
+		isSecure := h.config.IsHTTPS() || h.config.IsProduction()
+
+		c.SetCookie(
+			utils.CookieName,
+			csrfToken,
+			int(12*time.Hour.Seconds()),
+			"/",
+			"",
+			isSecure,
+			true,
+		)
+
+		c.JSON(http.StatusOK, gin.H{"token": csrfToken})
 	}
 }
 

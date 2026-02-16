@@ -86,7 +86,7 @@ export default function App() {
               }}
             />
 
-            <WorkflowTable />
+            <WorkflowTable ready={ready} />
           </Box>
         </Box>
       </BaseStyles>

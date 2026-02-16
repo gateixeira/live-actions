@@ -56,7 +56,7 @@ export WEBHOOK_SECRET=$(openssl rand -hex 32)
 ./live-actions
 ```
 
-Open `http://localhost:8080/dashboard` in your browser.
+Open `http://localhost:8080` in your browser.
 
 ### Option 2: Docker
 
@@ -116,8 +116,7 @@ Update your GitHub webhook URL to the ngrok HTTPS URL (e.g., `https://a1b2c3d4.n
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /` | Health check |
-| `GET /dashboard` | Interactive dashboard UI |
+| `GET /` | Dashboard UI |
 | `GET /metrics` | Prometheus metrics endpoint |
 | `GET /events` | Server-Sent Events for real-time updates |
 | `POST /webhook` | GitHub webhook receiver |
@@ -128,7 +127,7 @@ Live Actions is a single Go binary with all assets embedded:
 
 - **Database**: SQLite (stored at `DATABASE_URL`, default `./data/live-actions.db`)
 - **Frontend**: React + Primer (embedded via `go:embed`)
-- **Metrics**: `/metrics` endpoint for external Prometheus scraping; dashboard charts powered by internal SQLite snapshots
+- **Metrics**: `/metrics` endpoint for external Prometheus scraping; charts powered by internal SQLite snapshots
 
 No external services required.
 

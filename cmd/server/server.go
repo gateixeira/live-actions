@@ -59,8 +59,6 @@ func SetupAndRun(staticFS embed.FS) {
 	sseHandler := handlers.GetSSEHandler()
 	webhookHandler := handlers.NewWebhookHandler(cfg, db)
 	apiHandler := handlers.NewAPIHandler(cfg, db)
-	dashboardHandler := handlers.NewDashboardHandler(cfg, staticFS)
-	rootHandler := handlers.NewRootHandler()
 	metricsHandler := handlers.NewMetricsHandler()
 
 	r := gin.New()
@@ -78,14 +76,19 @@ func SetupAndRun(staticFS embed.FS) {
 	r.StaticFS("/assets", http.FS(assetsFS))
 
 	// Routes
-	r.GET("/", rootHandler.Root())
 	r.POST("/webhook", handlers.ValidateGitHubWebhook(cfg), webhookHandler.Handle())
+	r.GET("/api/csrf", apiHandler.GetCSRFToken())
 	r.GET("/api/workflow-runs", handlers.ValidateOrigin(), apiHandler.GetWorkflowRuns())
 	r.GET("/api/workflow-jobs/:run_id", handlers.ValidateOrigin(), apiHandler.GetWorkflowJobsByRunID())
 	r.GET("/api/metrics/query_range", handlers.ValidateOrigin(), apiHandler.GetCurrentMetrics())
 	r.GET("/events", sseHandler.HandleSSE())
-	r.GET("/dashboard", dashboardHandler.Dashboard())
 	r.GET("/metrics", metricsHandler.Metrics())
+
+	// Serve the React SPA for all other routes
+	indexHTML, _ := fs.ReadFile(staticFS, "frontend/dist/index.html")
+	r.NoRoute(func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+	})
 
 	// Create HTTP server
 	srv := &http.Server{

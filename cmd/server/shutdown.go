@@ -24,7 +24,7 @@ func NewGracefulShutdown(server *http.Server, timeout time.Duration) *GracefulSh
 	return &GracefulShutdown{
 		server:   server,
 		timeout:  timeout,
-		shutdown: make(chan struct{}),
+		shutdown: make(chan struct{}, 1),
 	}
 }
 

@@ -22,7 +22,7 @@ func SecurityHeaders() gin.HandlerFunc {
 		// Control referrer information
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 
-		// Content Security Policy - restrictive policy for dashboard
+		// Content Security Policy - restrictive policy for the application
 		csp := "default-src 'self'; " +
 			"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
 			"style-src 'self' 'unsafe-inline' https://unpkg.com; " +

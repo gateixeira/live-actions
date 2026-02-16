@@ -8,21 +8,16 @@ import type {
 let csrfToken: string | null = null
 
 function getCsrfToken(): string | null {
-  if (csrfToken) return csrfToken
-  // Read from meta tag injected by the Go server (production)
-  const meta = document.querySelector('meta[name="csrf-token"]')
-  csrfToken = meta?.getAttribute('content') ?? null
   return csrfToken
 }
 
-// Fetch /dashboard to set the CSRF cookie and extract the token from the response
+// Fetch /api/csrf to get the CSRF token and set the cookie
 export async function initCsrf(): Promise<void> {
   if (getCsrfToken()) return
   try {
-    const res = await fetch('/dashboard', { credentials: 'same-origin' })
-    const html = await res.text()
-    const match = html.match(/meta name="csrf-token" content="([^"]+)"/)
-    if (match) csrfToken = match[1]
+    const res = await fetch('/api/csrf', { credentials: 'same-origin' })
+    const data = await res.json()
+    if (data.token) csrfToken = data.token
   } catch {
     // Non-fatal: API calls will fail with 403 if CSRF is missing
   }

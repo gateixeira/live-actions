@@ -175,7 +175,7 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
   )
 }
 
-export function WorkflowTable() {
+export function WorkflowTable({ ready }: { ready: boolean }) {
   const [runs, setRuns] = useState<WorkflowRun[]>([])
   const [pagination, setPagination] = useState<Pagination | null>(null)
   const [page, setPage] = useState(1)
@@ -194,8 +194,9 @@ export function WorkflowTable() {
   }, [page])
 
   useEffect(() => {
+    if (!ready) return
     load()
-  }, [load])
+  }, [load, ready])
 
   // Expose a trigger for SSE refreshes
   const triggerRefresh = useCallback(() => {

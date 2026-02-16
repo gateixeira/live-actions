@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -83,11 +84,11 @@ func TestValidateOrigin_WrongHost(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
 	req.Host = "localhost:8080"
-	req.Header.Set("Referer", "http://evil.com:8080/dashboard")
+	req.Header.Set("Referer", "http://evil.com:8080/")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "can only be accessed from the local dashboard")
+	assert.Contains(t, w.Body.String(), "can only be accessed from the application")
 }
 
 func TestValidateOrigin_WrongPath(t *testing.T) {
@@ -118,7 +119,7 @@ func TestValidateOrigin_MissingCSRFCookie(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
 	req.Host = "localhost:8080"
-	req.Header.Set("Referer", "http://localhost:8080/dashboard")
+	req.Header.Set("Referer", "http://localhost:8080/")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
@@ -135,7 +136,7 @@ func TestValidateOrigin_MissingCSRFHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
 	req.Host = "localhost:8080"
-	req.Header.Set("Referer", "http://localhost:8080/dashboard")
+	req.Header.Set("Referer", "http://localhost:8080/")
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
 		Value: "test-token",
@@ -156,7 +157,7 @@ func TestValidateOrigin_MismatchedCSRFToken(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
 	req.Host = "localhost:8080"
-	req.Header.Set("Referer", "http://localhost:8080/dashboard")
+	req.Header.Set("Referer", "http://localhost:8080/")
 	req.Header.Set(utils.HeaderName, "wrong-token")
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
@@ -178,7 +179,7 @@ func TestValidateOrigin_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
 	req.Host = "localhost:8080"
-	req.Header.Set("Referer", "http://localhost:8080/dashboard")
+	req.Header.Set("Referer", "http://localhost:8080/")
 	req.Header.Set(utils.HeaderName, "test-token")
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
@@ -510,7 +511,7 @@ func TestIntegration_ValidateOriginWithGetWorkflowRuns(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/workflow-runs", nil)
 	req.Host = "localhost:8080"
-	req.Header.Set("Referer", "http://localhost:8080/dashboard")
+	req.Header.Set("Referer", "http://localhost:8080/")
 	req.Header.Set(utils.HeaderName, "test-token")
 	req.AddCookie(&http.Cookie{
 		Name:  utils.CookieName,
@@ -604,4 +605,65 @@ func TestGetWorkflowRuns_PaginationEdgeCases(t *testing.T) {
 			mockDB.AssertExpectations(t)
 		})
 	}
+}
+
+func TestGetCSRFToken_Success(t *testing.T) {
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
+
+	router.GET("/api/csrf", handler.GetCSRFToken())
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/csrf", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, response["token"])
+
+	// Verify cookie is set
+	cookies := w.Result().Cookies()
+	var csrfCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == utils.CookieName {
+			csrfCookie = c
+			break
+		}
+	}
+	assert.NotNil(t, csrfCookie, "CSRF cookie should be set")
+	decodedValue, _ := url.QueryUnescape(csrfCookie.Value)
+	assert.Equal(t, response["token"], decodedValue)
+	assert.True(t, csrfCookie.HttpOnly)
+}
+
+func TestGetCSRFToken_SecureCookie(t *testing.T) {
+	router, mockDB, _ := setupAPITest()
+	prodConfig := &config.Config{
+		Vars: config.Vars{
+			Environment: "production",
+		},
+	}
+	handler := NewAPIHandler(prodConfig, mockDB)
+
+	router.GET("/api/csrf", handler.GetCSRFToken())
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/csrf", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	cookies := w.Result().Cookies()
+	var csrfCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == utils.CookieName {
+			csrfCookie = c
+			break
+		}
+	}
+	assert.NotNil(t, csrfCookie)
+	assert.True(t, csrfCookie.Secure, "Cookie should be secure in production")
 }
