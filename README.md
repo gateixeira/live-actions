@@ -30,13 +30,6 @@ Real-time monitoring for GitHub Actions workflows and runners. A single self-con
 
 ![Workflows](images/workflows.png)
 
-#### **🏷️ Job Label Analytics**
-- Configurable detection of GitHub-hosted vs self-hosted runners
-- Running, queued, completed, and total counts per label combination
-- Live refresh of label-based metrics
-
-![Labels](images/labels.png)
-
 #### **⚡ Runner Analytics**
 - Monitor workflow queue times and peak demand periods
 
