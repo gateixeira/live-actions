@@ -47,7 +47,12 @@ func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimesta
 		FROM workflow_jobs 
 		WHERE id = ?`, workflowJob.ID).Scan(&isTerminal)
 
-	if err != nil && err != sql.ErrNoRows && isTerminal {
+	if err != nil && err != sql.ErrNoRows {
+		tx.Rollback()
+		return false, fmt.Errorf("failed to check terminal state: %w", err)
+	}
+
+	if err == nil && isTerminal {
 		tx.Rollback()
 		return false, nil
 	}
@@ -93,7 +98,12 @@ func (db *DBWrapper) AddOrUpdateRun(workflowRun models.WorkflowRun, eventTimesta
 		FROM workflow_runs 
 		WHERE id = ?`, workflowRun.ID).Scan(&isTerminal)
 
-	if err != nil && err != sql.ErrNoRows && isTerminal {
+	if err != nil && err != sql.ErrNoRows {
+		tx.Rollback()
+		return false, fmt.Errorf("failed to check terminal state: %w", err)
+	}
+
+	if err == nil && isTerminal {
 		tx.Rollback()
 		return false, nil
 	}
