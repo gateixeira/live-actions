@@ -111,10 +111,17 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 		}
 
 		// Parse event type from context
-		eventType, exists := c.Get("eventType")
+		eventTypeVal, exists := c.Get("eventType")
 		if !exists {
 			logger.Logger.Error("Event type not found in context")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing event type"})
+			return
+		}
+
+		eventTypeStr, ok := eventTypeVal.(string)
+		if !ok {
+			logger.Logger.Error("Event type is not a string")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid event type"})
 			return
 		}
 
@@ -163,13 +170,13 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 			return
 		}
 
-		handler := h.handlers[eventType.(string)]
+		handler := h.handlers[eventTypeStr]
 		extractedTime, err := handler.ExtractEventTimestamp(jsonData)
 
 		if err != nil {
 			logger.Logger.Error("Failed to extract event timestamp",
 				zap.Error(err),
-				zap.String("event_type", eventType.(string)),
+				zap.String("event_type", eventTypeStr),
 				zap.String("delivery_id", deliveryID))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to extract event timestamp"})
 			return
@@ -179,7 +186,7 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 		if err != nil {
 			logger.Logger.Error("Failed to extract ordering key",
 				zap.Error(err),
-				zap.String("event_type", eventType.(string)),
+				zap.String("event_type", eventTypeStr),
 				zap.String("delivery_id", deliveryID))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to extract ordering key"})
 			return
@@ -189,7 +196,7 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 		if err != nil {
 			logger.Logger.Error("Failed to extract status priority",
 				zap.Error(err),
-				zap.String("event_type", eventType.(string)),
+				zap.String("event_type", eventTypeStr),
 				zap.String("delivery_id", deliveryID))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to extract status priority"})
 			return
@@ -202,7 +209,7 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 				DeliveryID: deliveryID,
 				ReceivedAt: time.Now(),
 			},
-			EventType:      eventType.(string),
+			EventType:      eventTypeStr,
 			RawPayload:     jsonData,
 			OrderingKey:    orderingKey,
 			StatusPriority: statusPriority,
