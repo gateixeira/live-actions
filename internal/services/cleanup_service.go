@@ -77,7 +77,7 @@ func (cs *CleanupService) performCleanup() error {
 		zap.Time("cutoff_time", time.Now().Add(-retentionPeriod)),
 	)
 
-	deletedRuns, deletedJobs, deletedEvents, err := cs.db.CleanupOldData(retentionPeriod)
+	deletedRuns, deletedJobs, deletedEvents, err := cs.db.CleanupOldData(cs.ctx, retentionPeriod)
 	if err != nil {
 		logger.Logger.Error("Data cleanup failed", zap.Error(err))
 		return err

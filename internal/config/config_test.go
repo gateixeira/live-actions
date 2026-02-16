@@ -10,7 +10,10 @@ func TestNewConfig(t *testing.T) {
 	os.Clearenv()
 
 	t.Run("with default values", func(t *testing.T) {
-		config := NewConfig()
+		config, err := NewConfig()
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
 
 		if config.Vars.Port != "8080" {
 			t.Errorf("Expected Port to be 8080, got %s", config.Vars.Port)
@@ -30,7 +33,10 @@ func TestNewConfig(t *testing.T) {
 		os.Setenv("DATABASE_PATH", "test.db")
 		os.Setenv("LOG_LEVEL", "debug")
 
-		config := NewConfig()
+		config, err := NewConfig()
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
 
 		if config.Vars.WebhookSecret != "test-secret" {
 			t.Errorf("Expected WebhookSecret to be test-secret, got %s", config.Vars.WebhookSecret)
@@ -45,13 +51,26 @@ func TestNewConfig(t *testing.T) {
 			t.Errorf("Expected LogLevel to be debug, got %s", config.Vars.LogLevel)
 		}
 	})
+
+	t.Run("production without webhook secret", func(t *testing.T) {
+		os.Clearenv()
+		os.Setenv("ENVIRONMENT", "production")
+
+		_, err := NewConfig()
+		if err == nil {
+			t.Error("Expected error for missing WEBHOOK_SECRET in production")
+		}
+	})
 }
 
 func TestGetDatabasePath(t *testing.T) {
 	os.Clearenv()
 
 	t.Run("with default values", func(t *testing.T) {
-		config := NewConfig()
+		config, err := NewConfig()
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
 		expected := "./data/live-actions.db"
 		if p := config.GetDatabasePath(); p != expected {
 			t.Errorf("Expected DatabasePath %s, got %s", expected, p)
@@ -61,7 +80,10 @@ func TestGetDatabasePath(t *testing.T) {
 	t.Run("with custom values", func(t *testing.T) {
 		os.Setenv("DATABASE_PATH", "custom.db")
 
-		config := NewConfig()
+		config, err := NewConfig()
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
 		expected := "custom.db"
 		if p := config.GetDatabasePath(); p != expected {
 			t.Errorf("Expected DatabasePath %s, got %s", expected, p)

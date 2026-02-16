@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -48,7 +49,7 @@ func (h *WorkflowRunHandler) HandleEvent(eventData []byte, sequence *models.Even
 		zap.Time("received_at", sequence.ReceivedAt))
 
 	// Store run data in database with atomicity checks
-	updated, err := h.db.AddOrUpdateRun(event.WorkflowRun, sequence.Timestamp)
+	updated, err := h.db.AddOrUpdateRun(context.TODO(), event.WorkflowRun, sequence.Timestamp)
 	if err != nil {
 		logger.Logger.Error("Error saving run to database",
 			zap.Error(err),

@@ -4,4 +4,5 @@ data/
 .env
 live-actions
 cover.*
+coverage.*
 frontend/dist/

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -44,7 +45,7 @@ func (h *WorkflowJobHandler) HandleEvent(eventData []byte, sequence *models.Even
 	event.WorkflowJob.Status = models.JobStatus(event.Action)
 
 	// Get the previous state of this job from database to handle transitions correctly
-	previousJob, err := h.db.GetWorkflowJobByID(event.WorkflowJob.ID)
+	previousJob, err := h.db.GetWorkflowJobByID(context.TODO(), event.WorkflowJob.ID)
 	if err != nil {
 		logger.Logger.Error("Error getting previous job state",
 			zap.Error(err),
@@ -53,7 +54,7 @@ func (h *WorkflowJobHandler) HandleEvent(eventData []byte, sequence *models.Even
 	}
 
 	// Store job data in database with atomicity checks
-	updated, err := h.db.AddOrUpdateJob(event.WorkflowJob, sequence.Timestamp)
+	updated, err := h.db.AddOrUpdateJob(context.TODO(), event.WorkflowJob, sequence.Timestamp)
 	if err != nil {
 		logger.Logger.Error("Error saving job to database",
 			zap.Error(err),
@@ -95,7 +96,7 @@ func (h *WorkflowJobHandler) HandleEvent(eventData []byte, sequence *models.Even
 
 func (h *WorkflowJobHandler) sendMetricsUpdate() {
 	// Query database for current job counts
-	running, queued, err := h.db.GetCurrentJobCounts()
+	running, queued, err := h.db.GetCurrentJobCounts(context.TODO())
 	if err != nil {
 		logger.Logger.Error("Failed to query current job counts", zap.Error(err))
 		return

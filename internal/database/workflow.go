@@ -1,12 +1,15 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/gateixeira/live-actions/models"
+	"github.com/gateixeira/live-actions/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // labelsToJSON converts a string slice to a JSON string for storage
@@ -24,7 +27,10 @@ func labelsFromJSON(s string) []string {
 	if s == "" {
 		return []string{}
 	}
-	json.Unmarshal([]byte(s), &labels)
+	if err := json.Unmarshal([]byte(s), &labels); err != nil {
+		logger.Logger.Warn("Failed to parse labels JSON", zap.String("input", s), zap.Error(err))
+		return []string{}
+	}
 	if labels == nil {
 		return []string{}
 	}
@@ -34,8 +40,8 @@ func labelsFromJSON(s string) []string {
 // AddOrUpdateJob adds or updates a workflow job with atomicity checks.
 // It prevents older events from overwriting newer terminal states.
 // Returns (updated, error) where updated indicates if the job was actually updated.
-func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimestamp time.Time) (bool, error) {
-	tx, err := DB.Begin()
+func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.WorkflowJob, eventTimestamp time.Time) (bool, error) {
+	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		time.Sleep(time.Millisecond * 100)
 		return false, fmt.Errorf("failed to start transaction: %w", err)
@@ -87,8 +93,8 @@ func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimesta
 	return true, nil
 }
 
-func (db *DBWrapper) AddOrUpdateRun(workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error) {
-	tx, err := DB.Begin()
+func (db *DBWrapper) AddOrUpdateRun(ctx context.Context, workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error) {
+	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to start transaction: %w", err)
 	}
@@ -141,11 +147,11 @@ func (db *DBWrapper) AddOrUpdateRun(workflowRun models.WorkflowRun, eventTimesta
 }
 
 // GetWorkflowRunsPaginated retrieves workflow runs with pagination support
-func (db *DBWrapper) GetWorkflowRunsPaginated(page int, limit int) ([]models.WorkflowRun, int, error) {
+func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, limit int) ([]models.WorkflowRun, int, error) {
 	offset := (page - 1) * limit
 
 	var totalCount int
-	err := DB.QueryRow("SELECT COUNT(*) FROM workflow_runs").Scan(&totalCount)
+	err := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs").Scan(&totalCount)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return []models.WorkflowRun{}, 0, nil
@@ -153,7 +159,7 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(page int, limit int) ([]models.Wor
 		return nil, 0, err
 	}
 
-	rows, err := DB.Query("SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs ORDER BY created_at DESC LIMIT ? OFFSET ?", limit, offset)
+	rows, err := db.db.QueryContext(ctx, "SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs ORDER BY created_at DESC LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -172,11 +178,15 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(page int, limit int) ([]models.Wor
 		runs = append(runs, run)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
 	return runs, totalCount, nil
 }
 
-func (db *DBWrapper) GetWorkflowJobsByRunID(runID int64) ([]models.WorkflowJob, error) {
-	rows, err := DB.Query("SELECT id, name, run_id, status, labels, html_url, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
+func (db *DBWrapper) GetWorkflowJobsByRunID(ctx context.Context, runID int64) ([]models.WorkflowJob, error) {
+	rows, err := db.db.QueryContext(ctx, "SELECT id, name, run_id, status, labels, html_url, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -200,18 +210,22 @@ func (db *DBWrapper) GetWorkflowJobsByRunID(runID int64) ([]models.WorkflowJob, 
 		jobs = append(jobs, job)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return jobs, nil
 }
 
 // GetWorkflowJobByID retrieves a single workflow job by its ID
-func (db *DBWrapper) GetWorkflowJobByID(jobID int64) (models.WorkflowJob, error) {
+func (db *DBWrapper) GetWorkflowJobByID(ctx context.Context, jobID int64) (models.WorkflowJob, error) {
 	var job models.WorkflowJob
 	var labelsJSON string
 	var createdAt string
 	var htmlUrl sql.NullString
 	var startedAt, completedAt sql.NullString
 
-	err := DB.QueryRow(`
+	err := db.db.QueryRowContext(ctx, `
 		SELECT id, name, run_id, status, labels, html_url, conclusion, 
 			   created_at, started_at, completed_at 
 		FROM workflow_jobs 
@@ -237,14 +251,19 @@ func (db *DBWrapper) GetWorkflowJobByID(jobID int64) (models.WorkflowJob, error)
 }
 
 // CleanupOldData removes workflow runs and jobs older than the retention period
-func (db *DBWrapper) CleanupOldData(retentionPeriod time.Duration) (int64, int64, int64, error) {
+func (db *DBWrapper) CleanupOldData(ctx context.Context, retentionPeriod time.Duration) (int64, int64, int64, error) {
 	cutoffTime := time.Now().Add(-retentionPeriod).Format(time.RFC3339)
 
-	tx, err := DB.Begin()
+	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to start transaction: %w", err)
 	}
-	defer tx.Rollback()
+	committed := false
+	defer func() {
+		if !committed {
+			tx.Rollback()
+		}
+	}()
 
 	jobResult, err := tx.Exec("DELETE FROM workflow_jobs WHERE created_at < ?", cutoffTime)
 	if err != nil {
@@ -284,13 +303,14 @@ func (db *DBWrapper) CleanupOldData(retentionPeriod time.Duration) (int64, int64
 	if err := tx.Commit(); err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to commit cleanup transaction: %w", err)
 	}
+	committed = true
 
 	return deletedRuns, deletedJobs, deletedEvents, nil
 }
 
-func (db *DBWrapper) GetCurrentJobCounts() (int, int, error) {
+func (db *DBWrapper) GetCurrentJobCounts(ctx context.Context) (int, int, error) {
 	var running, queued int
-	err := DB.QueryRow(`
+	err := db.db.QueryRowContext(ctx, `
 		SELECT 
 			COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0)
@@ -322,6 +342,7 @@ func parseTime(s string) time.Time {
 		if err != nil {
 			t, err = time.Parse("2006-01-02T15:04:05Z", s)
 			if err != nil {
+				logger.Logger.Warn("Failed to parse time string", zap.String("input", s), zap.Error(err))
 				return time.Time{}
 			}
 		}

@@ -5,15 +5,20 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gateixeira/live-actions/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
+
+func testConfig() *config.Config {
+	return &config.Config{Vars: config.Vars{Environment: "production", TLSEnabled: true}}
+}
 
 func TestSecurityHeaders(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(SecurityHeaders())
+	router.Use(SecurityHeaders(testConfig()))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "test"})
 	})
@@ -86,7 +91,7 @@ func TestSecurityHeaders_AllHeadersPresent(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(SecurityHeaders())
+	router.Use(SecurityHeaders(testConfig()))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "test"})
 	})
@@ -118,7 +123,7 @@ func TestSecurityHeaders_NoInterferenceWithResponse(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(SecurityHeaders())
+	router.Use(SecurityHeaders(testConfig()))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "test", "data": "response"})
 	})
@@ -145,7 +150,7 @@ func TestSecurityHeaders_MultipleRequests(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(SecurityHeaders())
+	router.Use(SecurityHeaders(testConfig()))
 	router.GET("/test1", func(c *gin.Context) {
 		c.JSON(200, gin.H{"endpoint": "test1"})
 	})
@@ -184,7 +189,7 @@ func TestSecurityHeaders_CSPConfiguration(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(SecurityHeaders())
+	router.Use(SecurityHeaders(testConfig()))
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "test"})
 	})

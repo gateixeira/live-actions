@@ -18,6 +18,7 @@ type EventOrderingService struct {
 	maxAge        time.Duration
 	batchSize     int
 	mutex         sync.Mutex
+	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
@@ -36,17 +37,21 @@ func NewEventOrderingService(db database.DatabaseInterface, processFunc func(*mo
 }
 
 func (s *EventOrderingService) Start() {
+	s.wg.Add(1)
 	go s.flushWorker()
 }
+
 func (s *EventOrderingService) Stop() {
 	s.cancel()
+	s.wg.Wait()
 }
 
 func (s *EventOrderingService) AddEvent(event *models.OrderedEvent) error {
-	return s.db.StoreWebhookEvent(event)
+	return s.db.StoreWebhookEvent(s.ctx, event)
 }
 
 func (s *EventOrderingService) flushWorker() {
+	defer s.wg.Done()
 	ticker := time.NewTicker(s.flushInterval)
 	defer ticker.Stop()
 
@@ -65,7 +70,7 @@ func (s *EventOrderingService) flushReadyEvents() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	events, err := s.db.GetPendingEventsByAge(s.maxAge, s.batchSize)
+	events, err := s.db.GetPendingEventsByAge(s.ctx, s.maxAge, s.batchSize)
 	if err != nil {
 		logger.Logger.Error("Failed to fetch pending events", zap.Error(err))
 		return
@@ -74,13 +79,15 @@ func (s *EventOrderingService) flushReadyEvents() {
 	if len(events) > 0 {
 		logger.Logger.Debug("Processing batch of pending events",
 			zap.Int("count", len(events)))
-		go s.processEvents(events)
+		s.processEvents(events)
 	}
 }
 
 func (s *EventOrderingService) flushAll() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	events, err := s.db.GetPendingEventsGrouped(1000)
+	events, err := s.db.GetPendingEventsGrouped(s.ctx, 1000)
 	if err != nil {
 		logger.Logger.Error("Failed to fetch all pending events", zap.Error(err))
 		return
@@ -89,7 +96,7 @@ func (s *EventOrderingService) flushAll() {
 	if len(events) > 0 {
 		logger.Logger.Debug("Processing all pending events",
 			zap.Int("count", len(events)))
-		go s.processEvents(events)
+		s.processEvents(events)
 	}
 }
 

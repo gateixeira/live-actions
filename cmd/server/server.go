@@ -21,7 +21,11 @@ import (
 
 // SetupAndRun configures the router and starts the server
 func SetupAndRun(staticFS embed.FS) {
-	cfg := config.NewConfig()
+	cfg, err := config.NewConfig()
+	if err != nil {
+		logger.InitLogger("error")
+		logger.Logger.Fatal("Failed to load configuration", zap.Error(err))
+	}
 
 	logger.InitLogger(cfg.Vars.LogLevel)
 	defer logger.SyncLogger()
@@ -36,19 +40,19 @@ func SetupAndRun(staticFS embed.FS) {
 		os.MkdirAll(dir, 0700)
 	}
 
-	err := database.InitDB(dbPath)
+	sqlDB, err := database.InitDB(dbPath)
 	if err != nil {
 		logger.Logger.Error("Failed to initialize database", zap.Error(err))
 		os.Exit(1)
 	}
 
 	defer func() {
-		if err := database.CloseDB(); err != nil {
+		if err := sqlDB.Close(); err != nil {
 			logger.Logger.Error("Failed to close database connection", zap.Error(err))
 		}
 	}()
 
-	db := database.NewDBWrapper()
+	db := database.NewDBWrapper(sqlDB)
 
 	ctx := context.Background()
 
@@ -66,7 +70,7 @@ func SetupAndRun(staticFS embed.FS) {
 	r.Use(middleware.ErrorHandler())
 	r.Use(middleware.RequestLogger())
 	r.Use(middleware.SecurityLogger())
-	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.SecurityHeaders(cfg))
 	r.Use(middleware.InputValidator())
 
 	// Serve static assets from embedded FS
@@ -89,6 +93,9 @@ func SetupAndRun(staticFS embed.FS) {
 	r.GET("/api/metrics/query_range", handlers.ValidateOrigin(), apiHandler.GetCurrentMetrics())
 	r.GET("/events", sseHandler.HandleSSE())
 	r.GET("/metrics", metricsHandler.Metrics())
+	r.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 
 	// Serve the React SPA for all other routes
 	indexHTML, err := fs.ReadFile(staticFS, "frontend/dist/index.html")
@@ -133,7 +140,8 @@ func SetupAndRun(staticFS embed.FS) {
 	// Wait for graceful shutdown
 	gracefulShutdown.Wait()
 
-	// Stop cleanup service
+	// Stop services
+	webhookHandler.Shutdown()
 	cleanupService.Stop()
 	metricsService.Stop()
 

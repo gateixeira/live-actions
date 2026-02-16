@@ -78,11 +78,11 @@ func TestWorkflowJobHandler_HandleEvent_Success(t *testing.T) {
 	assert.NoError(t, err, "Should be able to marshal test data")
 
 	// Set up mock expectations
-	mockDB.On("GetWorkflowJobByID", int64(12345)).Return(models.WorkflowJob{
+	mockDB.On("GetWorkflowJobByID", mock.Anything, int64(12345)).Return(models.WorkflowJob{
 		Status: models.JobStatusQueued, // Previous status
 	}, nil)
 
-	mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
+	mockDB.On("AddOrUpdateJob", mock.Anything, mock.MatchedBy(func(job models.WorkflowJob) bool {
 		return job.ID == 12345 &&
 			job.Name == "Test Job" &&
 			job.Status == models.JobStatus("in_progress") &&
@@ -90,7 +90,7 @@ func TestWorkflowJobHandler_HandleEvent_Success(t *testing.T) {
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(1, 2, nil)
+	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(1, 2, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -147,16 +147,16 @@ func TestWorkflowJobHandler_HandleEvent_DatabaseGetJobError(t *testing.T) {
 	assert.NoError(t, err, "Should be able to marshal test data")
 
 	// Set up mock expectations - database error for GetWorkflowJobByID
-	mockDB.On("GetWorkflowJobByID", int64(12345)).Return(models.WorkflowJob{}, errors.New("database connection failed"))
+	mockDB.On("GetWorkflowJobByID", mock.Anything, int64(12345)).Return(models.WorkflowJob{}, errors.New("database connection failed"))
 
 	// Should still proceed with AddOrUpdateJob
-	mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
+	mockDB.On("AddOrUpdateJob", mock.Anything, mock.MatchedBy(func(job models.WorkflowJob) bool {
 		return job.ID == 12345 &&
 			job.Status == models.JobStatus("queued")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(0, 1, nil)
+	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(0, 1, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -198,11 +198,11 @@ func TestWorkflowJobHandler_HandleEvent_DatabaseAddJobError(t *testing.T) {
 	assert.NoError(t, err, "Should be able to marshal test data")
 
 	// Set up mock expectations
-	mockDB.On("GetWorkflowJobByID", int64(12345)).Return(models.WorkflowJob{
+	mockDB.On("GetWorkflowJobByID", mock.Anything, int64(12345)).Return(models.WorkflowJob{
 		Status: models.JobStatusInProgress,
 	}, nil)
 
-	mockDB.On("AddOrUpdateJob", mock.AnythingOfType("models.WorkflowJob"), mock.AnythingOfType("time.Time")).Return(false, errors.New("database save failed"))
+	mockDB.On("AddOrUpdateJob", mock.Anything, mock.AnythingOfType("models.WorkflowJob"), mock.AnythingOfType("time.Time")).Return(false, errors.New("database save failed"))
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -275,17 +275,17 @@ func TestWorkflowJobHandler_HandleEvent_DifferentActions(t *testing.T) {
 			assert.NoError(t, err, "Should be able to marshal test data")
 
 			// Set up mock expectations
-			mockDB.On("GetWorkflowJobByID", int64(12345)).Return(models.WorkflowJob{
+			mockDB.On("GetWorkflowJobByID", mock.Anything, int64(12345)).Return(models.WorkflowJob{
 				Status: models.JobStatusQueued,
 			}, nil)
 
-			mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
+			mockDB.On("AddOrUpdateJob", mock.Anything, mock.MatchedBy(func(job models.WorkflowJob) bool {
 				return job.ID == 12345 &&
 					job.Status == tc.expectedStatus
 			}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 			// Set up mock expectations for metrics update
-			mockDB.On("GetCurrentJobCounts").Return(1, 0, nil)
+			mockDB.On("GetCurrentJobCounts", mock.Anything).Return(1, 0, nil)
 
 			// Execute the handler
 			err = handler.HandleEvent(eventData, sequence)
@@ -361,17 +361,17 @@ func TestWorkflowJobHandler_HandleEvent_StatusTransitions(t *testing.T) {
 			assert.NoError(t, err, "Should be able to marshal test data")
 
 			// Set up mock expectations
-			mockDB.On("GetWorkflowJobByID", int64(12345)).Return(models.WorkflowJob{
+			mockDB.On("GetWorkflowJobByID", mock.Anything, int64(12345)).Return(models.WorkflowJob{
 				Status: tc.previousStatus,
 			}, nil)
 
-			mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
+			mockDB.On("AddOrUpdateJob", mock.Anything, mock.MatchedBy(func(job models.WorkflowJob) bool {
 				return job.ID == 12345 &&
 					job.Status == tc.expectedStatus
 			}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 			// Set up mock expectations for metrics update
-			mockDB.On("GetCurrentJobCounts").Return(1, 0, nil)
+			mockDB.On("GetCurrentJobCounts", mock.Anything).Return(1, 0, nil)
 
 			// Execute the handler
 			err = handler.HandleEvent(eventData, sequence)
@@ -416,20 +416,20 @@ func TestWorkflowJobHandler_HandleEvent_WithStartedAtTime(t *testing.T) {
 	assert.NoError(t, err, "Should be able to marshal test data")
 
 	// Set up mock expectations
-	mockDB.On("GetWorkflowJobByID", int64(12345)).Return(models.WorkflowJob{
+	mockDB.On("GetWorkflowJobByID", mock.Anything, int64(12345)).Return(models.WorkflowJob{
 		Status: models.JobStatusQueued,
 	}, nil)
 
 	// Capture the job to verify StartedAt is preserved
 	var capturedJob models.WorkflowJob
-	mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
+	mockDB.On("AddOrUpdateJob", mock.Anything, mock.MatchedBy(func(job models.WorkflowJob) bool {
 		capturedJob = job
 		return job.ID == 12345 &&
 			job.Status == models.JobStatus("in_progress")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(1, 0, nil)
+	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(1, 0, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -472,14 +472,14 @@ func TestWorkflowJobHandler_HandleEvent_GetCurrentJobCountsError(t *testing.T) {
 	assert.NoError(t, err, "Should be able to marshal test data")
 
 	// Set up mock expectations
-	mockDB.On("GetWorkflowJobByID", int64(12345)).Return(models.WorkflowJob{
+	mockDB.On("GetWorkflowJobByID", mock.Anything, int64(12345)).Return(models.WorkflowJob{
 		Status: models.JobStatusInProgress,
 	}, nil)
 
-	mockDB.On("AddOrUpdateJob", mock.AnythingOfType("models.WorkflowJob"), mock.AnythingOfType("time.Time")).Return(true, nil)
+	mockDB.On("AddOrUpdateJob", mock.Anything, mock.AnythingOfType("models.WorkflowJob"), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(0, 0, errors.New("database error"))
+	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(0, 0, errors.New("database error"))
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -535,15 +535,15 @@ func TestWorkflowJobHandler_HandleEvent_MinimalRequiredFields(t *testing.T) {
 	assert.NoError(t, err, "Should be able to marshal minimal test data")
 
 	// Set up mock expectations
-	mockDB.On("GetWorkflowJobByID", int64(1)).Return(models.WorkflowJob{}, nil)
+	mockDB.On("GetWorkflowJobByID", mock.Anything, int64(1)).Return(models.WorkflowJob{}, nil)
 
-	mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
+	mockDB.On("AddOrUpdateJob", mock.Anything, mock.MatchedBy(func(job models.WorkflowJob) bool {
 		return job.ID == 1 &&
 			job.Status == models.JobStatus("queued")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(0, 1, nil)
+	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(0, 1, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)

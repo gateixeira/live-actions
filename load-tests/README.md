@@ -4,53 +4,48 @@ This directory contains load tests for the live-actions service using [k6](https
 
 ## Webhook Load Test
 
-The `webhook-load.js` script simulates webhook events for the GitHub Actions runners demand API.
+The `webhook-load.js` script simulates realistic GitHub Actions webhook traffic by sending `workflow_job` and `workflow_run` events through the full lifecycle (queued → in_progress → completed).
 
 ### Test Scenario
 
-This test simulates three types of webhook events:
+The test simulates 15 different label combinations across three runner types:
 
-- `queued` jobs
-- `in_progress` jobs
-- `completed` jobs
+- **GitHub-hosted** (5 labels): `ubuntu-latest`, `windows-latest`, `macos-latest`, etc.
+- **Self-hosted single** (5 labels): `self-hosted`, `linux`, `gpu`, etc.
+- **Combined label arrays** (5 sets): `[self-hosted, linux, x64]`, `[self-hosted, gpu, cuda]`, etc.
 
-Features:
+Each virtual user runs a full job lifecycle per iteration:
 
-- Randomly creates different job status types
-- 50% chance for a job to have a "self-hosted" label, 50% chance to have empty labels
-- During rampdown phase, all queued and in_progress jobs are completed before the test ends
-- Tracks custom metrics for all job types
+1. Sends `queued` event (job + optionally a workflow run, 60% chance)
+2. Waits a random queue time (weighted: 30% fast, 40% normal, 20% slow, 10% very slow)
+3. Sends `in_progress` event
+4. Waits 2–5 seconds (simulated execution)
+5. Sends `completed` event with random outcome (success/failure/cancelled)
 
 ### Running the Test
 
-1. Make sure you have k6 installed
-2. Run the test:
+1. Install [k6](https://k6.io/docs/get-started/installation/)
+2. Set `WEBHOOK_SECRET` in the script to match your server configuration
+3. Run:
 
 ```bash
-# Using k6 directly
 k6 run webhook-load.js
 ```
 
-3. Customize the test parameters:
+### Configuration
 
-You can modify the stages in the options object to adjust:
+Modify the `options` object in the script to adjust load profile:
 
-- Duration of test
-- Number of virtual users
-- Ramp-up and ramp-down behavior
-
-For example:
-
-```bash
-# Run with 20 VUs for 2 minutes
-k6 run --vus 20 --duration 2m webhook-load.js
+```js
+stages: [
+  { duration: "30s", target: 15 },   // Ramp up to 15 VUs
+  { duration: "200s", target: 15 },  // Hold at 15 VUs
+  { duration: "20s", target: 0 },    // Ramp down
+]
 ```
 
-### Metrics
+Or override via CLI:
 
-The test tracks the following custom metrics:
-
-- `successful_queued_jobs`: Count of successfully sent queued job events
-- `successful_in_progress_jobs`: Count of successfully sent in-progress job events
-- `successful_completed_jobs`: Count of successfully sent completed job events
-- `failed_requests`: Rate of failed requests
+```bash
+k6 run --vus 20 --duration 2m webhook-load.js
+```

@@ -75,7 +75,7 @@ func TestWorkflowRunHandler_HandleEvent_Success(t *testing.T) {
 	assert.NoError(t, err, "Should be able to marshal test data")
 
 	// Set up mock expectations - use MatchedBy for flexible comparison
-	mockDB.On("AddOrUpdateRun", mock.MatchedBy(func(run models.WorkflowRun) bool {
+	mockDB.On("AddOrUpdateRun", mock.Anything, mock.MatchedBy(func(run models.WorkflowRun) bool {
 		return run.ID == 12345 &&
 			run.Name == "Test Workflow" &&
 			run.Status == models.JobStatus("completed") &&
@@ -146,7 +146,7 @@ func TestWorkflowRunHandler_HandleEvent_DatabaseError(t *testing.T) {
 	assert.NoError(t, err, "Should be able to marshal test data")
 
 	// Set up mock expectations with database error - use MatchedBy for flexible comparison
-	mockDB.On("AddOrUpdateRun", mock.MatchedBy(func(run models.WorkflowRun) bool {
+	mockDB.On("AddOrUpdateRun", mock.Anything, mock.MatchedBy(func(run models.WorkflowRun) bool {
 		return run.ID == 12345 &&
 			run.Name == "Test Workflow" &&
 			run.Status == models.JobStatus("requested") &&
@@ -227,7 +227,7 @@ func TestWorkflowRunHandler_HandleEvent_DifferentActions(t *testing.T) {
 			assert.NoError(t, err, "Should be able to marshal test data")
 
 			// Set up mock expectations - use MatchedBy for flexible comparison
-			mockDB.On("AddOrUpdateRun", mock.MatchedBy(func(run models.WorkflowRun) bool {
+			mockDB.On("AddOrUpdateRun", mock.Anything, mock.MatchedBy(func(run models.WorkflowRun) bool {
 				return run.ID == 12345 &&
 					run.Name == "Test Workflow" &&
 					run.Status == tc.expected &&
@@ -283,7 +283,7 @@ func TestWorkflowRunHandler_HandleEvent_StatusAndRepositoryMapping(t *testing.T)
 
 	// Capture the argument passed to AddOrUpdateRun to verify the transformation
 	var capturedRun models.WorkflowRun
-	mockDB.On("AddOrUpdateRun", mock.MatchedBy(func(run models.WorkflowRun) bool {
+	mockDB.On("AddOrUpdateRun", mock.Anything, mock.MatchedBy(func(run models.WorkflowRun) bool {
 		capturedRun = run
 		return true
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
@@ -379,7 +379,7 @@ func TestWorkflowRunHandler_HandleEvent_MinimalRequiredFields(t *testing.T) {
 	assert.NoError(t, err, "Should be able to marshal minimal test data")
 
 	// Set up mock expectations - use MatchedBy for flexible comparison
-	mockDB.On("AddOrUpdateRun", mock.MatchedBy(func(run models.WorkflowRun) bool {
+	mockDB.On("AddOrUpdateRun", mock.Anything, mock.MatchedBy(func(run models.WorkflowRun) bool {
 		return run.ID == 1 &&
 			run.Name == "Minimal Workflow" &&
 			run.Status == models.JobStatus("completed") &&

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -8,8 +9,8 @@ import (
 )
 
 // InsertMetricsSnapshot records current running/queued job counts.
-func (d *DBWrapper) InsertMetricsSnapshot(running, queued int) error {
-	_, err := DB.Exec(
+func (d *DBWrapper) InsertMetricsSnapshot(ctx context.Context, running, queued int) error {
+	_, err := d.db.ExecContext(ctx,
 		"INSERT INTO metrics_snapshots (running_jobs, queued_jobs) VALUES (?, ?)",
 		running, queued,
 	)
@@ -17,9 +18,9 @@ func (d *DBWrapper) InsertMetricsSnapshot(running, queued int) error {
 }
 
 // GetMetricsHistory returns time-series snapshots within the given duration.
-func (d *DBWrapper) GetMetricsHistory(since time.Duration) ([]models.MetricsSnapshot, error) {
+func (d *DBWrapper) GetMetricsHistory(ctx context.Context, since time.Duration) ([]models.MetricsSnapshot, error) {
 	cutoff := time.Now().UTC().Add(-since).Format("2006-01-02 15:04:05")
-	rows, err := DB.Query(
+	rows, err := d.db.QueryContext(ctx,
 		`SELECT timestamp, running_jobs, queued_jobs
 		 FROM metrics_snapshots
 		 WHERE timestamp >= ?
@@ -49,7 +50,7 @@ func (d *DBWrapper) GetMetricsHistory(since time.Duration) ([]models.MetricsSnap
 
 // GetMetricsSummary computes running_jobs, queued_jobs, avg_queue_time, and peak_demand
 // from the database for the given time window.
-func (d *DBWrapper) GetMetricsSummary(since time.Duration) (map[string]float64, error) {
+func (d *DBWrapper) GetMetricsSummary(ctx context.Context, since time.Duration) (map[string]float64, error) {
 	result := map[string]float64{
 		"running_jobs":   0,
 		"queued_jobs":    0,
@@ -58,7 +59,7 @@ func (d *DBWrapper) GetMetricsSummary(since time.Duration) (map[string]float64, 
 	}
 
 	// Current running and queued counts (live from workflow_jobs)
-	row := DB.QueryRow(`SELECT
+	row := d.db.QueryRowContext(ctx, `SELECT
 		COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0)
 		FROM workflow_jobs`)
@@ -75,7 +76,7 @@ func (d *DBWrapper) GetMetricsSummary(since time.Duration) (map[string]float64, 
 	// Average queue time: average seconds between created_at and started_at for
 	// jobs that started within the period.
 	var avgQueue float64
-	err := DB.QueryRow(`SELECT COALESCE(AVG(
+	err := d.db.QueryRowContext(ctx, `SELECT COALESCE(AVG(
 		(julianday(started_at) - julianday(created_at)) * 86400
 	), 0) FROM workflow_jobs
 	WHERE started_at IS NOT NULL AND started_at >= ?`, jobsCutoff).Scan(&avgQueue)
@@ -88,7 +89,7 @@ func (d *DBWrapper) GetMetricsSummary(since time.Duration) (map[string]float64, 
 
 	// Peak demand from snapshots (max of running + queued in the period)
 	var peak float64
-	err = DB.QueryRow(`SELECT COALESCE(MAX(running_jobs + queued_jobs), 0)
+	err = d.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(running_jobs + queued_jobs), 0)
 		FROM metrics_snapshots WHERE timestamp >= ?`, snapshotsCutoff).Scan(&peak)
 	if err == nil {
 		result["peak_demand"] = peak

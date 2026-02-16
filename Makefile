@@ -23,7 +23,7 @@ GOLINT=golangci-lint
 
 # Build the frontend React app
 build-frontend:
-	cd frontend && npm install && npm run build
+	cd frontend && npm ci && npm run build
 
 # Build the application
 build: build-frontend

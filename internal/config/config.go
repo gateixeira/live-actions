@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -22,7 +23,7 @@ type Config struct {
 }
 
 // NewConfig creates and initializes a new application config.
-func NewConfig() *Config {
+func NewConfig() (*Config, error) {
 	vars := Vars{
 		WebhookSecret:        os.Getenv("WEBHOOK_SECRET"),
 		Port:                 getEnvOrDefault("PORT", "8080"),
@@ -39,11 +40,11 @@ func NewConfig() *Config {
 	// Validate critical configuration in production
 	if config.IsProduction() {
 		if vars.WebhookSecret == "" {
-			panic("WEBHOOK_SECRET is required in production")
+			return nil, fmt.Errorf("WEBHOOK_SECRET is required in production")
 		}
 	}
 
-	return config
+	return config, nil
 }
 
 func getEnvOrDefault(key, defaultValue string) string {

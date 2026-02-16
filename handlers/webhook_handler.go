@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -235,7 +236,7 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 
 func (h *WebhookHandler) processOrderedEvent(event *models.OrderedEvent) error {
 
-	if err := h.db.StoreWebhookEvent(event); err != nil {
+	if err := h.db.StoreWebhookEvent(context.TODO(), event); err != nil {
 		logger.Logger.Error("Failed to store webhook event", zap.Error(err))
 		//log and continue
 	}
@@ -254,11 +255,11 @@ func (h *WebhookHandler) processOrderedEvent(event *models.OrderedEvent) error {
 		logger.Logger.Error("Failed to handle event", zap.Error(err),
 			zap.String("event_type", event.EventType),
 			zap.String("delivery_id", event.Sequence.DeliveryID))
-		h.db.MarkEventFailed(event.Sequence.DeliveryID)
+		h.db.MarkEventFailed(context.TODO(), event.Sequence.DeliveryID)
 		return fmt.Errorf("failed to handle event: %w", err)
 	}
 
-	return h.db.MarkEventProcessed(event.Sequence.DeliveryID)
+	return h.db.MarkEventProcessed(context.TODO(), event.Sequence.DeliveryID)
 }
 
 func (h *WebhookHandler) Shutdown() {

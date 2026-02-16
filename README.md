@@ -117,6 +117,7 @@ Update your GitHub webhook URL to the ngrok HTTPS URL (e.g., `https://a1b2c3d4.n
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Dashboard UI |
+| `GET /healthz` | Health check |
 | `GET /metrics` | Prometheus metrics endpoint |
 | `GET /events` | Server-Sent Events for real-time updates |
 | `POST /webhook` | GitHub webhook receiver |

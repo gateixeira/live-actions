@@ -8,7 +8,9 @@ interface SSECallbacks {
 
 export function useSSE(callbacks: SSECallbacks) {
   const cbRef = useRef(callbacks)
-  cbRef.current = callbacks
+  useEffect(() => {
+    cbRef.current = callbacks
+  })
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {

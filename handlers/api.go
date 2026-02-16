@@ -98,7 +98,7 @@ func (h *APIHandler) GetWorkflowRuns() gin.HandlerFunc {
 		page, limit := GetPaginationParams(c)
 
 		// Retrieve workflow runs from the database with pagination
-		runs, totalCount, err := h.db.GetWorkflowRunsPaginated(page, limit)
+		runs, totalCount, err := h.db.GetWorkflowRunsPaginated(c.Request.Context(), page, limit)
 		if err != nil {
 			logger.Logger.Error("Error retrieving workflow runs", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve workflow runs"})
@@ -137,7 +137,7 @@ func (h *APIHandler) GetWorkflowJobsByRunID() gin.HandlerFunc {
 		}
 
 		// Retrieve workflow jobs for the given run ID from the database
-		jobs, err := h.db.GetWorkflowJobsByRunID(runIDInt64)
+		jobs, err := h.db.GetWorkflowJobsByRunID(c.Request.Context(), runIDInt64)
 		if err != nil {
 			logger.Logger.Error("Error retrieving workflow jobs by run ID", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve workflow jobs"})
@@ -163,14 +163,14 @@ func (h *APIHandler) GetCurrentMetrics() gin.HandlerFunc {
 
 		since := periodToDuration(period)
 
-		summary, err := h.db.GetMetricsSummary(since)
+		summary, err := h.db.GetMetricsSummary(c.Request.Context(), since)
 		if err != nil {
 			logger.Logger.Error("Failed to get metrics summary", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve metrics"})
 			return
 		}
 
-		snapshots, err := h.db.GetMetricsHistory(since)
+		snapshots, err := h.db.GetMetricsHistory(c.Request.Context(), since)
 		if err != nil {
 			logger.Logger.Error("Failed to get metrics history", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve metrics"})

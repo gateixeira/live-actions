@@ -8,6 +8,7 @@ import (
 	"github.com/gateixeira/live-actions/internal/config"
 	"github.com/gateixeira/live-actions/internal/database"
 	"github.com/gateixeira/live-actions/pkg/logger"
+	"github.com/stretchr/testify/mock"
 )
 
 // Note: MockDatabase is now shared across packages via database.MockDatabase
@@ -37,7 +38,7 @@ func TestCleanupService_StartStop(t *testing.T) {
 
 	// Setup mock expectations for initial cleanup
 	expectedRetention := config.GetDataRetentionDuration()
-	mockDB.On("CleanupOldData", expectedRetention).Return(int64(0), int64(0), int64(0), nil)
+	mockDB.On("CleanupOldData", mock.Anything, expectedRetention).Return(int64(0), int64(0), int64(0), nil)
 
 	// Start the service in a goroutine since it blocks
 	done := make(chan struct{})
@@ -78,7 +79,7 @@ func TestCleanupService_ContextCancellation(t *testing.T) {
 
 	// Setup mock expectations for initial cleanup
 	expectedRetention := config.GetDataRetentionDuration()
-	mockDB.On("CleanupOldData", expectedRetention).Return(int64(0), int64(0), int64(0), nil)
+	mockDB.On("CleanupOldData", mock.Anything, expectedRetention).Return(int64(0), int64(0), int64(0), nil)
 
 	// Start the service in a goroutine since it blocks
 	done := make(chan struct{})

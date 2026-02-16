@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/gateixeira/live-actions/models"
@@ -22,15 +23,21 @@ type SSEHandler struct {
 }
 
 // Global SSE handler instance
-var sseHandler *SSEHandler
+var (
+	sseHandler *SSEHandler
+	sseOnce    sync.Once
+)
 
 func InitSSEHandler() {
-	sseHandler = &SSEHandler{
-		client: make(chan SSEEvent, 100),
-	}
+	sseOnce.Do(func() {
+		sseHandler = &SSEHandler{
+			client: make(chan SSEEvent, 100),
+		}
+	})
 }
 
 func GetSSEHandler() *SSEHandler {
+	InitSSEHandler()
 	return sseHandler
 }
 

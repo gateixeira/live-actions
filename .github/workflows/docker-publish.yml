@@ -1,4 +1,4 @@
-name: CD
+name: Docker Publish
 
 on:
   release:

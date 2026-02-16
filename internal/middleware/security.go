@@ -1,11 +1,12 @@
 package middleware
 
 import (
+	"github.com/gateixeira/live-actions/internal/config"
 	"github.com/gin-gonic/gin"
 )
 
 // SecurityHeaders adds essential security headers to all responses
-func SecurityHeaders() gin.HandlerFunc {
+func SecurityHeaders(cfg *config.Config) gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
 		// Prevent clickjacking attacks
 		c.Header("X-Frame-Options", "DENY")
@@ -16,8 +17,10 @@ func SecurityHeaders() gin.HandlerFunc {
 		// Enable XSS protection
 		c.Header("X-XSS-Protection", "1; mode=block")
 
-		// Enforce HTTPS (adjust for your deployment)
-		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		// Only set HSTS in production with HTTPS to avoid caching issues in dev
+		if cfg.IsProduction() || cfg.IsHTTPS() {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 
 		// Control referrer information
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")

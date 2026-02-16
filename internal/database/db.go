@@ -16,18 +16,15 @@ import (
 //go:embed migrations/*.up.sql
 var migrationsFS embed.FS
 
-var DB *sql.DB
-
 // InitDB initializes the SQLite database connection and runs migrations
-func InitDB(dsn string) error {
-	var err error
-	DB, err = sql.Open("sqlite", dsn)
+func InitDB(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if err = DB.Ping(); err != nil {
-		return err
+	if err = db.Ping(); err != nil {
+		return nil, err
 	}
 
 	// SQLite pragmas for performance and reliability
@@ -38,29 +35,21 @@ func InitDB(dsn string) error {
 		"PRAGMA foreign_keys=ON",
 	}
 	for _, p := range pragmas {
-		if _, err := DB.Exec(p); err != nil {
-			return fmt.Errorf("failed to set pragma %s: %w", p, err)
+		if _, err := db.Exec(p); err != nil {
+			return nil, fmt.Errorf("failed to set pragma %s: %w", p, err)
 		}
 	}
 
 	// SQLite handles concurrency at the file level; keep pool small
-	DB.SetMaxOpenConns(1)
+	db.SetMaxOpenConns(1)
 
-	if err = RunMigrations(DB); err != nil {
+	if err = RunMigrations(db); err != nil {
 		logger.Logger.Error("Failed to run database migrations", zap.Error(err))
-		return err
+		return nil, err
 	}
 
 	logger.Logger.Info("Database initialized successfully")
-	return nil
-}
-
-// CloseDB closes the database connection
-func CloseDB() error {
-	if DB != nil {
-		return DB.Close()
-	}
-	return nil
+	return db, nil
 }
 
 // RunMigrations applies pending SQL migration files from the embedded migrations/ directory.

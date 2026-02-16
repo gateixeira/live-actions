@@ -140,6 +140,7 @@ function createWebhookEvent(jobId, status, baseTime, runId) {
       id: jobId,
       name: `Job ${jobId}`,
       run_id: runId,
+      html_url: `https://github.com/example/repo/actions/runs/${runId}/jobs/${jobId}`,
       labels: labels,
       created_at: baseTime.toISOString(),
     }
@@ -148,7 +149,7 @@ function createWebhookEvent(jobId, status, baseTime, runId) {
   if (status === 'in_progress') {
     payload.workflow_job.started_at = now.toISOString();
   } else if (status === 'completed') {
-    payload.workflow_job.started_at = runningJobs.get(jobId).startedAt;
+    payload.workflow_job.started_at = runningJobs.get(jobId).startedAt.toISOString();
     payload.workflow_job.completed_at = now.toISOString();
     payload.workflow_job.conclusion = outcomes[Math.floor(Math.random() * outcomes.length)];
   }
@@ -183,9 +184,10 @@ function createWorkflowRunEvent(runId, status, baseTime) {
       id: runId,
       name: `Run ${runId}`,
       status: status,
-      url: `https://github.com/example/${randomRepo}/actions/runs/${runId}`,
+      html_url: `https://github.com/example/${randomRepo}/actions/runs/${runId}`,
       display_title: randomTitle,
       created_at: baseTime.toISOString(),
+      updated_at: now.toISOString(),
     }
   };
   
@@ -193,7 +195,7 @@ function createWorkflowRunEvent(runId, status, baseTime) {
   if (status === 'in_progress') {
     payload.workflow_run.run_started_at = now.toISOString();
   } else if (status === 'completed') {
-    payload.workflow_run.run_started_at = runningJobs.get(runId).startedAt;
+    payload.workflow_run.run_started_at = runningJobs.get(runId).startedAt.toISOString();
     payload.workflow_run.conclusion = outcomes[Math.floor(Math.random() * outcomes.length)];
   }
   

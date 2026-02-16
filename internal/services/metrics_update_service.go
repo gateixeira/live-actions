@@ -64,7 +64,7 @@ func (s *MetricsUpdateService) updateMetrics() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	running, queued, err := s.db.GetCurrentJobCounts()
+	running, queued, err := s.db.GetCurrentJobCounts(s.ctx)
 	if err != nil {
 		logger.Logger.Error("Failed to get current job counts", zap.Error(err))
 		return
@@ -73,7 +73,7 @@ func (s *MetricsUpdateService) updateMetrics() {
 	s.registry.UpdateCurrentJobCounts(running, queued)
 
 	// Store a snapshot for historical charts
-	if err := s.db.InsertMetricsSnapshot(running, queued); err != nil {
+	if err := s.db.InsertMetricsSnapshot(s.ctx, running, queued); err != nil {
 		logger.Logger.Error("Failed to insert metrics snapshot", zap.Error(err))
 	}
 }

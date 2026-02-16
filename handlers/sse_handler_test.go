@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,13 +21,13 @@ func setupSSETest() {
 	// Initialize logger for tests
 	logger.InitLogger("error")
 	gin.SetMode(gin.TestMode)
+	// Reset global SSE handler state for test isolation
+	sseHandler = nil
+	sseOnce = sync.Once{}
 }
 
 func TestInitSSEHandler(t *testing.T) {
 	setupSSETest()
-
-	// Reset global handler to test initialization
-	sseHandler = nil
 
 	InitSSEHandler()
 
@@ -294,9 +295,6 @@ func TestSendMetricsUpdate(t *testing.T) {
 func TestSendMetricsUpdate_NilHandler(t *testing.T) {
 	setupSSETest()
 
-	// Set global handler to nil
-	sseHandler = nil
-
 	testUpdate := models.MetricsUpdateEvent{
 		RunningJobs: 1,
 	}
@@ -336,9 +334,6 @@ func TestSendWorkflowUpdate(t *testing.T) {
 
 func TestSendWorkflowUpdate_NilHandler(t *testing.T) {
 	setupSSETest()
-
-	// Set global handler to nil
-	sseHandler = nil
 
 	testUpdate := models.WorkflowUpdateEvent{
 		Type:   "job",

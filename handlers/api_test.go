@@ -209,7 +209,7 @@ func TestGetWorkflowJobsByRunID_Success(t *testing.T) {
 			RunID:       1,
 		},
 	}
-	mockDB.On("GetWorkflowJobsByRunID", int64(1)).Return(expectedJobs, nil)
+	mockDB.On("GetWorkflowJobsByRunID", mock.Anything, int64(1)).Return(expectedJobs, nil)
 
 	router.GET("/api/workflow-jobs/:run_id", handler.GetWorkflowJobsByRunID())
 
@@ -230,7 +230,7 @@ func TestGetWorkflowJobsByRunID_DatabaseError(t *testing.T) {
 	router, mockDB, testConfig := setupAPITest()
 	handler := NewAPIHandler(testConfig, mockDB)
 
-	mockDB.On("GetWorkflowJobsByRunID", int64(1)).Return([]models.WorkflowJob{}, errors.New("database error"))
+	mockDB.On("GetWorkflowJobsByRunID", mock.Anything, int64(1)).Return([]models.WorkflowJob{}, errors.New("database error"))
 
 	router.GET("/api/workflow-jobs/:run_id", handler.GetWorkflowJobsByRunID())
 
@@ -265,7 +265,7 @@ func TestGetWorkflowRuns_Success(t *testing.T) {
 		},
 	}
 
-	mockDB.On("GetWorkflowRunsPaginated", 1, 25).Return(expectedRuns, 1, nil)
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25).Return(expectedRuns, 1, nil)
 
 	router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 
@@ -298,7 +298,7 @@ func TestGetWorkflowRuns_WithPagination(t *testing.T) {
 	handler := NewAPIHandler(testConfig, mockDB)
 
 	expectedRuns := []models.WorkflowRun{}
-	mockDB.On("GetWorkflowRunsPaginated", 2, 10).Return(expectedRuns, 50, nil)
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 2, 10).Return(expectedRuns, 50, nil)
 
 	router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 
@@ -329,7 +329,7 @@ func TestGetWorkflowRuns_InvalidPagination(t *testing.T) {
 
 	// Should default to page=1, limit=25 for invalid values
 	expectedRuns := []models.WorkflowRun{}
-	mockDB.On("GetWorkflowRunsPaginated", 1, 25).Return(expectedRuns, 0, nil)
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25).Return(expectedRuns, 0, nil)
 
 	router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 
@@ -354,7 +354,7 @@ func TestGetWorkflowRuns_DatabaseError(t *testing.T) {
 	router, mockDB, testConfig := setupAPITest()
 	handler := NewAPIHandler(testConfig, mockDB)
 
-	mockDB.On("GetWorkflowRunsPaginated", 1, 25).Return([]models.WorkflowRun{}, 0, errors.New("database error"))
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25).Return([]models.WorkflowRun{}, 0, errors.New("database error"))
 
 	router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 
@@ -373,13 +373,13 @@ func TestGetCurrentMetrics_Success(t *testing.T) {
 	handler := NewAPIHandler(testConfig, mockDB)
 
 	// Mock DB responses
-	mockDB.On("GetMetricsSummary", mock.Anything).Return(map[string]float64{
+	mockDB.On("GetMetricsSummary", mock.Anything, mock.Anything).Return(map[string]float64{
 		"running_jobs":   5,
 		"queued_jobs":    3,
 		"avg_queue_time": 0,
 		"peak_demand":    0,
 	}, nil)
-	mockDB.On("GetMetricsHistory", mock.Anything).Return([]models.MetricsSnapshot{}, nil)
+	mockDB.On("GetMetricsHistory", mock.Anything, mock.Anything).Return([]models.MetricsSnapshot{}, nil)
 
 	router.GET("/api/current-metrics", handler.GetCurrentMetrics())
 
@@ -407,7 +407,7 @@ func TestGetCurrentMetrics_DBError(t *testing.T) {
 	router, mockDB, testConfig := setupAPITest()
 	handler := NewAPIHandler(testConfig, mockDB)
 
-	mockDB.On("GetMetricsSummary", mock.Anything).Return(map[string]float64(nil), assert.AnError)
+	mockDB.On("GetMetricsSummary", mock.Anything, mock.Anything).Return(map[string]float64(nil), assert.AnError)
 
 	router.GET("/api/current-metrics", handler.GetCurrentMetrics())
 
@@ -425,13 +425,13 @@ func TestGetCurrentMetrics_WithTimeSeries(t *testing.T) {
 	router, mockDB, testConfig := setupAPITest()
 	handler := NewAPIHandler(testConfig, mockDB)
 
-	mockDB.On("GetMetricsSummary", mock.Anything).Return(map[string]float64{
+	mockDB.On("GetMetricsSummary", mock.Anything, mock.Anything).Return(map[string]float64{
 		"running_jobs":   2,
 		"queued_jobs":    1,
 		"avg_queue_time": 0,
 		"peak_demand":    0,
 	}, nil)
-	mockDB.On("GetMetricsHistory", mock.Anything).Return([]models.MetricsSnapshot{
+	mockDB.On("GetMetricsHistory", mock.Anything, mock.Anything).Return([]models.MetricsSnapshot{
 		{Timestamp: 1672531200, Running: 2, Queued: 1},
 		{Timestamp: 1672531260, Running: 3, Queued: 0},
 	}, nil)
@@ -480,7 +480,7 @@ func TestGetWorkflowJobsByRunID_NoJobsFound(t *testing.T) {
 	handler := NewAPIHandler(testConfig, mockDB)
 
 	// Mock empty result from database
-	mockDB.On("GetWorkflowJobsByRunID", int64(1)).Return([]models.WorkflowJob{}, nil)
+	mockDB.On("GetWorkflowJobsByRunID", mock.Anything, int64(1)).Return([]models.WorkflowJob{}, nil)
 
 	router.GET("/api/workflow-jobs/:run_id", handler.GetWorkflowJobsByRunID())
 
@@ -505,7 +505,7 @@ func TestIntegration_ValidateOriginWithGetWorkflowRuns(t *testing.T) {
 
 	// Mock successful database call
 	expectedRuns := []models.WorkflowRun{}
-	mockDB.On("GetWorkflowRunsPaginated", 1, 25).Return(expectedRuns, 0, nil)
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25).Return(expectedRuns, 0, nil)
 
 	// Test with valid CSRF and referer
 	w := httptest.NewRecorder()
@@ -584,7 +584,7 @@ func TestGetWorkflowRuns_PaginationEdgeCases(t *testing.T) {
 			handler := NewAPIHandler(testConfig, mockDB)
 
 			expectedRuns := []models.WorkflowRun{}
-			mockDB.On("GetWorkflowRunsPaginated", tc.expectedPage, tc.expectedLimit).Return(expectedRuns, 0, nil)
+			mockDB.On("GetWorkflowRunsPaginated", mock.Anything, tc.expectedPage, tc.expectedLimit).Return(expectedRuns, 0, nil)
 
 			router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 

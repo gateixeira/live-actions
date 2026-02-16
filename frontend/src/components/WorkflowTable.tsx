@@ -93,7 +93,7 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
 
   useEffect(() => {
     if (!expanded) return
-    setLoading(true)
+    setLoading(true) // eslint-disable-line react-hooks/set-state-in-effect
     getWorkflowJobs(run.id)
       .then((r) => setJobs(r.workflow_jobs ?? []))
       .catch((err) => { console.error('Failed to load jobs', err); setJobs([]) })
@@ -203,7 +203,7 @@ export function WorkflowTable({ ready, refreshSignal }: { ready: boolean; refres
 
   useEffect(() => {
     if (!ready) return
-    load()
+    load() // eslint-disable-line react-hooks/set-state-in-effect
   }, [load, ready, refreshSignal])
 
   return (

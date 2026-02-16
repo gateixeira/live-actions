@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -9,7 +10,7 @@ import (
 )
 
 // StoreWebhookEvent stores a webhook event in the database
-func (db *DBWrapper) StoreWebhookEvent(event *models.OrderedEvent) error {
+func (db *DBWrapper) StoreWebhookEvent(ctx context.Context, event *models.OrderedEvent) error {
 	var err error
 	maxRetries := 3
 
@@ -29,7 +30,7 @@ func (db *DBWrapper) StoreWebhookEvent(event *models.OrderedEvent) error {
 	}
 
 	for range maxRetries {
-		_, err = DB.Exec(
+		_, err = db.db.ExecContext(ctx,
 			`INSERT INTO webhook_events (delivery_id, event_type, sequence_id, 
             github_timestamp, received_at, processed_at, raw_payload, status, ordering_key, status_priority) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -63,7 +64,7 @@ func (db *DBWrapper) StoreWebhookEvent(event *models.OrderedEvent) error {
 	return err
 }
 
-func (db *DBWrapper) GetPendingEventsGrouped(limit int) ([]*models.OrderedEvent, error) {
+func (db *DBWrapper) GetPendingEventsGrouped(ctx context.Context, limit int) ([]*models.OrderedEvent, error) {
 	query := `
         SELECT delivery_id, event_type, sequence_id, github_timestamp, received_at, 
                processed_at, raw_payload, ordering_key, status_priority
@@ -72,7 +73,7 @@ func (db *DBWrapper) GetPendingEventsGrouped(limit int) ([]*models.OrderedEvent,
         ORDER BY github_timestamp ASC, ordering_key ASC, status_priority ASC
         LIMIT ?`
 
-	rows, err := DB.Query(query, limit)
+	rows, err := db.db.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pending events: %w", err)
 	}
@@ -112,10 +113,14 @@ func (db *DBWrapper) GetPendingEventsGrouped(limit int) ([]*models.OrderedEvent,
 		events = append(events, &event)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return events, nil
 }
 
-func (db *DBWrapper) GetPendingEventsByAge(maxAge time.Duration, limit int) ([]*models.OrderedEvent, error) {
+func (db *DBWrapper) GetPendingEventsByAge(ctx context.Context, maxAge time.Duration, limit int) ([]*models.OrderedEvent, error) {
 	cutoff := time.Now().Add(-maxAge).Format(time.RFC3339)
 
 	query := `
@@ -126,7 +131,7 @@ func (db *DBWrapper) GetPendingEventsByAge(maxAge time.Duration, limit int) ([]*
         ORDER BY github_timestamp ASC, ordering_key ASC, status_priority ASC
         LIMIT ?`
 
-	rows, err := DB.Query(query, cutoff, limit)
+	rows, err := db.db.QueryContext(ctx, query, cutoff, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pending events by age: %w", err)
 	}
@@ -166,12 +171,16 @@ func (db *DBWrapper) GetPendingEventsByAge(maxAge time.Duration, limit int) ([]*
 		events = append(events, &event)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return events, nil
 }
 
-func (db *DBWrapper) MarkEventProcessed(deliveryID string) error {
+func (db *DBWrapper) MarkEventProcessed(ctx context.Context, deliveryID string) error {
 	now := time.Now().Format(time.RFC3339)
-	_, err := DB.Exec(
+	_, err := db.db.ExecContext(ctx,
 		"UPDATE webhook_events SET status = 'processed', processed_at = ? WHERE delivery_id = ?",
 		now, deliveryID)
 	if err != nil {
@@ -180,8 +189,8 @@ func (db *DBWrapper) MarkEventProcessed(deliveryID string) error {
 	return nil
 }
 
-func (db *DBWrapper) MarkEventFailed(deliveryID string) error {
-	_, err := DB.Exec(
+func (db *DBWrapper) MarkEventFailed(ctx context.Context, deliveryID string) error {
+	_, err := db.db.ExecContext(ctx,
 		"UPDATE webhook_events SET status = 'failed' WHERE delivery_id = ?",
 		deliveryID)
 	if err != nil {

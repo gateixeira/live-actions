@@ -70,7 +70,7 @@ func TestEventOrderingService_AddEvent(t *testing.T) {
 			name:  "successful event storage",
 			event: createTestEvent("delivery-1", "workflow_job", "job-123", 1),
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("StoreWebhookEvent", mock.AnythingOfType("*models.OrderedEvent")).Return(nil)
+				m.On("StoreWebhookEvent", mock.Anything, mock.AnythingOfType("*models.OrderedEvent")).Return(nil)
 			},
 			expectedError: false,
 		},
@@ -78,7 +78,7 @@ func TestEventOrderingService_AddEvent(t *testing.T) {
 			name:  "database error",
 			event: createTestEvent("delivery-2", "workflow_job", "job-456", 2),
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("StoreWebhookEvent", mock.AnythingOfType("*models.OrderedEvent")).Return(errors.New("database error"))
+				m.On("StoreWebhookEvent", mock.Anything, mock.AnythingOfType("*models.OrderedEvent")).Return(errors.New("database error"))
 			},
 			expectedError: true,
 		},
@@ -118,7 +118,7 @@ func TestEventOrderingService_StartStop(t *testing.T) {
 	service := NewEventOrderingService(mockDB, processFunc)
 
 	// Mock expectations for the initial flush on stop
-	mockDB.On("GetPendingEventsGrouped", 1000).Return([]*models.OrderedEvent{}, nil)
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil)
 
 	// Start the service
 	service.Start()
@@ -161,7 +161,7 @@ func TestEventOrderingService_flushReadyEvents(t *testing.T) {
 		{
 			name: "no pending events",
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("GetPendingEventsByAge", 10*time.Second, 100).Return([]*models.OrderedEvent{}, nil)
+				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 100).Return([]*models.OrderedEvent{}, nil)
 			},
 			expectedLogs: 0,
 		},
@@ -172,14 +172,14 @@ func TestEventOrderingService_flushReadyEvents(t *testing.T) {
 					createTestEvent("delivery-1", "workflow_job", "job-123", 1),
 					createTestEvent("delivery-2", "workflow_job", "job-456", 2),
 				}
-				m.On("GetPendingEventsByAge", 10*time.Second, 100).Return(events, nil)
+				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 100).Return(events, nil)
 			},
 			expectedLogs: 2,
 		},
 		{
 			name: "database error",
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("GetPendingEventsByAge", 10*time.Second, 100).Return([]*models.OrderedEvent{}, errors.New("db error"))
+				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 100).Return([]*models.OrderedEvent{}, errors.New("db error"))
 			},
 			expectedLogs: 0,
 		},
@@ -228,7 +228,7 @@ func TestEventOrderingService_flushAll(t *testing.T) {
 		{
 			name: "no pending events",
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("GetPendingEventsGrouped", 1000).Return([]*models.OrderedEvent{}, nil)
+				m.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil)
 			},
 			expectedLogs: 0,
 		},
@@ -239,14 +239,14 @@ func TestEventOrderingService_flushAll(t *testing.T) {
 					createTestEvent("delivery-1", "workflow_job", "job-123", 1),
 					createTestEvent("delivery-2", "workflow_run", "run-789", 3),
 				}
-				m.On("GetPendingEventsGrouped", 1000).Return(events, nil)
+				m.On("GetPendingEventsGrouped", mock.Anything, 1000).Return(events, nil)
 			},
 			expectedLogs: 2,
 		},
 		{
 			name: "database error",
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("GetPendingEventsGrouped", 1000).Return([]*models.OrderedEvent{}, errors.New("db error"))
+				m.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, errors.New("db error"))
 			},
 			expectedLogs: 0,
 		},
@@ -370,10 +370,10 @@ func TestEventOrderingService_flushWorker(t *testing.T) {
 	mockDB := new(database.MockDatabase)
 
 	// Set up expectations for periodic flush calls
-	mockDB.On("GetPendingEventsByAge", mock.AnythingOfType("time.Duration"), mock.AnythingOfType("int")).Return([]*models.OrderedEvent{}, nil).Maybe()
+	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.AnythingOfType("time.Duration"), mock.AnythingOfType("int")).Return([]*models.OrderedEvent{}, nil).Maybe()
 
 	// Set up expectations for final flush on shutdown
-	mockDB.On("GetPendingEventsGrouped", 1000).Return([]*models.OrderedEvent{}, nil).Once()
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Once()
 
 	processFunc := func(event *models.OrderedEvent) error {
 		return nil
@@ -385,16 +385,13 @@ func TestEventOrderingService_flushWorker(t *testing.T) {
 	service.flushInterval = 50 * time.Millisecond
 
 	// Start the flush worker
-	go service.flushWorker()
+	service.Start()
 
 	// Let it run for a short time
 	time.Sleep(120 * time.Millisecond)
 
-	// Stop the service
-	service.cancel()
-
-	// Give time for cleanup
-	time.Sleep(50 * time.Millisecond)
+	// Stop the service and wait for completion
+	service.Stop()
 
 	mockDB.AssertExpectations(t)
 }
@@ -406,9 +403,9 @@ func TestEventOrderingService_ConcurrentAccess(t *testing.T) {
 	mockDB := new(database.MockDatabase)
 
 	// Allow multiple calls to database methods
-	mockDB.On("StoreWebhookEvent", mock.AnythingOfType("*models.OrderedEvent")).Return(nil).Maybe()
-	mockDB.On("GetPendingEventsByAge", mock.AnythingOfType("time.Duration"), mock.AnythingOfType("int")).Return([]*models.OrderedEvent{}, nil).Maybe()
-	mockDB.On("GetPendingEventsGrouped", 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
+	mockDB.On("StoreWebhookEvent", mock.Anything, mock.AnythingOfType("*models.OrderedEvent")).Return(nil).Maybe()
+	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.AnythingOfType("time.Duration"), mock.AnythingOfType("int")).Return([]*models.OrderedEvent{}, nil).Maybe()
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
 
 	processedEvents := make([]string, 0)
 	var mu sync.Mutex
@@ -468,7 +465,7 @@ func TestEventOrderingService_ContextCancellation(t *testing.T) {
 	mockDB := new(database.MockDatabase)
 
 	// Expect the final flush call when context is cancelled
-	mockDB.On("GetPendingEventsGrouped", 1000).Return([]*models.OrderedEvent{}, nil).Once()
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Once()
 
 	processFunc := func(event *models.OrderedEvent) error {
 		return nil
@@ -477,23 +474,9 @@ func TestEventOrderingService_ContextCancellation(t *testing.T) {
 	service := NewEventOrderingService(mockDB, processFunc)
 	service.flushInterval = 1 * time.Second // Longer interval to test cancellation
 
-	// Start the flush worker
-	workerDone := make(chan struct{})
-	go func() {
-		service.flushWorker()
-		close(workerDone)
-	}()
-
-	// Cancel the context immediately
-	service.cancel()
-
-	// Wait for the worker to finish
-	select {
-	case <-workerDone:
-		// Expected behavior
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("Worker did not respond to context cancellation in time")
-	}
+	// Start and immediately stop the service
+	service.Start()
+	service.Stop()
 
 	mockDB.AssertExpectations(t)
 }
