@@ -52,12 +52,11 @@ func SetupAndRun() {
 
 	cleanupService := services.NewCleanupService(config, db, ctx)
 	metricsService := services.NewMetricsUpdateService(db, 10*time.Second, ctx)
-	prometheusService := services.NewPrometheusService(config.Vars.PrometheusURL)
 
 	handlers.InitSSEHandler()
 	sseHandler := handlers.GetSSEHandler()
-	webhookHandler := handlers.NewWebhookHandler(config, db, prometheusService)
-	apiHandler := handlers.NewAPIHandler(config, db, prometheusService)
+	webhookHandler := handlers.NewWebhookHandler(config, db)
+	apiHandler := handlers.NewAPIHandler(config, db)
 	dashboardHandler := handlers.NewDashboardHandler(config)
 	rootHandler := handlers.NewRootHandler()
 	metricsHandler := handlers.NewMetricsHandler()

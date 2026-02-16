@@ -76,3 +76,18 @@ func (m *MockDatabase) GetCurrentJobCounts() (map[string]map[string]int, error) 
 	args := m.Called()
 	return args.Get(0).(map[string]map[string]int), args.Error(1)
 }
+
+func (m *MockDatabase) InsertMetricsSnapshot(running, queued int) error {
+	args := m.Called(running, queued)
+	return args.Error(0)
+}
+
+func (m *MockDatabase) GetMetricsHistory(since time.Duration) ([]models.MetricsSnapshot, error) {
+	args := m.Called(since)
+	return args.Get(0).([]models.MetricsSnapshot), args.Error(1)
+}
+
+func (m *MockDatabase) GetMetricsSummary(since time.Duration) (map[string]float64, error) {
+	args := m.Called(since)
+	return args.Get(0).(map[string]float64), args.Error(1)
+}

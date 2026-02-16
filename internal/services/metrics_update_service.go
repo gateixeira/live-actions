@@ -71,4 +71,14 @@ func (s *MetricsUpdateService) updateMetrics() {
 	}
 
 	s.registry.UpdateCurrentJobCounts(jobCounts)
+
+	// Compute totals and store a snapshot for historical charts
+	var running, queued int
+	for _, statuses := range jobCounts {
+		running += statuses["in_progress"]
+		queued += statuses["queued"]
+	}
+	if err := s.db.InsertMetricsSnapshot(running, queued); err != nil {
+		logger.Logger.Error("Failed to insert metrics snapshot", zap.Error(err))
+	}
 }

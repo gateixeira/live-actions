@@ -318,6 +318,11 @@ func (db *DBWrapper) CleanupOldData(retentionPeriod time.Duration) (int64, int64
 		return 0, 0, 0, fmt.Errorf("failed to get affected events count: %w", err)
 	}
 
+	// Clean up old metrics snapshots
+	if _, err := tx.Exec("DELETE FROM metrics_snapshots WHERE timestamp < ?", cutoffTime); err != nil {
+		return 0, 0, 0, fmt.Errorf("failed to delete old metrics snapshots: %w", err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to commit cleanup transaction: %w", err)
 	}

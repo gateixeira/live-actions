@@ -145,3 +145,10 @@ type TimeSeriesEntry struct {
 	Metric map[string]string `json:"metric"`
 	Values [][]interface{}   `json:"values"`
 }
+
+// MetricsSnapshot is a point-in-time record of job counts stored in the DB.
+type MetricsSnapshot struct {
+	Timestamp int64 `json:"timestamp"`
+	Running   int   `json:"running"`
+	Queued    int   `json:"queued"`
+}

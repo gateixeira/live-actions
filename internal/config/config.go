@@ -17,7 +17,6 @@ type Vars struct {
 	Labels               []string
 	DataRetentionDays    int
 	CleanupIntervalHours int
-	PrometheusURL        string
 	RunnerTypeConfigPath string
 }
 
@@ -37,7 +36,6 @@ func NewConfig() *Config {
 		Environment:          getEnvOrDefault("ENVIRONMENT", "development"),
 		DataRetentionDays:    getEnvOrDefaultInt("DATA_RETENTION_DAYS", 30),    // Default 1 month
 		CleanupIntervalHours: getEnvOrDefaultInt("CLEANUP_INTERVAL_HOURS", 24), // Daily cleanup
-		PrometheusURL:        getEnvOrDefault("PROMETHEUS_URL", "http://localhost:9090"),
 		RunnerTypeConfigPath: getEnvOrDefault("RUNNER_TYPE_CONFIG_PATH", "config/runner_types.json"),
 	}
 

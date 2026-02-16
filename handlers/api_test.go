@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 
@@ -19,49 +18,32 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-type MockPrometheusService struct {
-	mock.Mock
-}
-
-func (m *MockPrometheusService) GetMetricsWithTimeSeries(period, start, end, step string) (*models.MetricsResponse, error) {
-	args := m.Called(period, start, end, step)
-	return args.Get(0).(*models.MetricsResponse), args.Error(1)
-}
-
-func (m *MockPrometheusService) QueryPrometheus(path string, queryParams url.Values) ([]byte, error) {
-	args := m.Called(path, queryParams)
-	return args.Get(0).([]byte), args.Error(1)
-}
-
-func setupAPITest() (*gin.Engine, *database.MockDatabase, *config.Config, *MockPrometheusService) {
+func setupAPITest() (*gin.Engine, *database.MockDatabase, *config.Config) {
 	// Initialize logger for tests
 	logger.InitLogger("error")
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	mockDB := &database.MockDatabase{}
-	mockPrometheus := &MockPrometheusService{}
 
 	// Create test config
 	testConfig := &config.Config{
-		Vars: config.Vars{
-			PrometheusURL: "http://localhost:9090",
-		},
+		Vars: config.Vars{},
 	}
 
-	return router, mockDB, testConfig, mockPrometheus
+	return router, mockDB, testConfig
 }
 
 func TestNewAPIHandler(t *testing.T) {
-	_, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	_, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	assert.NotNil(t, handler, "NewAPIHandler should return a non-nil handler")
 	assert.Equal(t, mockDB, handler.db, "Handler should store the database interface")
 }
 
 func TestValidateOrigin_MissingReferer(t *testing.T) {
-	router, _, _, _ := setupAPITest()
+	router, _, _ := setupAPITest()
 	router.Use(ValidateOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -76,7 +58,7 @@ func TestValidateOrigin_MissingReferer(t *testing.T) {
 }
 
 func TestValidateOrigin_InvalidReferer(t *testing.T) {
-	router, _, _, _ := setupAPITest()
+	router, _, _ := setupAPITest()
 	router.Use(ValidateOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -92,7 +74,7 @@ func TestValidateOrigin_InvalidReferer(t *testing.T) {
 }
 
 func TestValidateOrigin_WrongHost(t *testing.T) {
-	router, _, _, _ := setupAPITest()
+	router, _, _ := setupAPITest()
 	router.Use(ValidateOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -109,7 +91,7 @@ func TestValidateOrigin_WrongHost(t *testing.T) {
 }
 
 func TestValidateOrigin_WrongPath(t *testing.T) {
-	router, _, _, _ := setupAPITest()
+	router, _, _ := setupAPITest()
 	router.Use(ValidateOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -127,7 +109,7 @@ func TestValidateOrigin_WrongPath(t *testing.T) {
 }
 
 func TestValidateOrigin_MissingCSRFCookie(t *testing.T) {
-	router, _, _, _ := setupAPITest()
+	router, _, _ := setupAPITest()
 	router.Use(ValidateOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -144,7 +126,7 @@ func TestValidateOrigin_MissingCSRFCookie(t *testing.T) {
 }
 
 func TestValidateOrigin_MissingCSRFHeader(t *testing.T) {
-	router, _, _, _ := setupAPITest()
+	router, _, _ := setupAPITest()
 	router.Use(ValidateOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -165,7 +147,7 @@ func TestValidateOrigin_MissingCSRFHeader(t *testing.T) {
 }
 
 func TestValidateOrigin_MismatchedCSRFToken(t *testing.T) {
-	router, _, _, _ := setupAPITest()
+	router, _, _ := setupAPITest()
 	router.Use(ValidateOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -187,7 +169,7 @@ func TestValidateOrigin_MismatchedCSRFToken(t *testing.T) {
 }
 
 func TestValidateOrigin_Success(t *testing.T) {
-	router, _, _, _ := setupAPITest()
+	router, _, _ := setupAPITest()
 	router.Use(ValidateOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -209,8 +191,8 @@ func TestValidateOrigin_Success(t *testing.T) {
 }
 
 func TestGetWorkflowJobsByRunID_Success(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	// Mock data
 	expectedJobs := []models.WorkflowJob{
@@ -245,8 +227,8 @@ func TestGetWorkflowJobsByRunID_Success(t *testing.T) {
 }
 
 func TestGetWorkflowJobsByRunID_DatabaseError(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	mockDB.On("GetWorkflowJobsByRunID", int64(1)).Return([]models.WorkflowJob{}, errors.New("database error"))
 
@@ -263,8 +245,8 @@ func TestGetWorkflowJobsByRunID_DatabaseError(t *testing.T) {
 }
 
 func TestGetWorkflowRuns_Success(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	// Mock data
 	now := time.Now()
@@ -312,8 +294,8 @@ func TestGetWorkflowRuns_Success(t *testing.T) {
 }
 
 func TestGetWorkflowRuns_WithPagination(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	expectedRuns := []models.WorkflowRun{}
 	mockDB.On("GetWorkflowRunsPaginated", 2, 10).Return(expectedRuns, 50, nil)
@@ -342,8 +324,8 @@ func TestGetWorkflowRuns_WithPagination(t *testing.T) {
 }
 
 func TestGetWorkflowRuns_InvalidPagination(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	// Should default to page=1, limit=25 for invalid values
 	expectedRuns := []models.WorkflowRun{}
@@ -369,8 +351,8 @@ func TestGetWorkflowRuns_InvalidPagination(t *testing.T) {
 }
 
 func TestGetWorkflowRuns_DatabaseError(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	mockDB.On("GetWorkflowRunsPaginated", 1, 25).Return([]models.WorkflowRun{}, 0, errors.New("database error"))
 
@@ -387,8 +369,8 @@ func TestGetWorkflowRuns_DatabaseError(t *testing.T) {
 }
 
 func TestGetLabelMetrics_Success(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	// Mock data
 	expectedJobsByLabel := []models.LabelMetrics{
@@ -431,8 +413,8 @@ func TestGetLabelMetrics_Success(t *testing.T) {
 }
 
 func TestGetLabelMetrics_DatabaseError(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	mockDB.On("GetJobsByLabel", 1, 25).Return([]models.LabelMetrics{}, 0, errors.New("database error"))
 
@@ -449,8 +431,8 @@ func TestGetLabelMetrics_DatabaseError(t *testing.T) {
 }
 
 func TestGetLabelMetrics_WithPagination(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	expectedMetrics := []models.LabelMetrics{}
 	mockDB.On("GetJobsByLabel", 2, 10).Return(expectedMetrics, 50, nil)
@@ -479,8 +461,8 @@ func TestGetLabelMetrics_WithPagination(t *testing.T) {
 }
 
 func TestGetLabelMetrics_InvalidPagination(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	// Should default to page=1, limit=25 for invalid values
 	expectedMetrics := []models.LabelMetrics{}
@@ -506,37 +488,17 @@ func TestGetLabelMetrics_InvalidPagination(t *testing.T) {
 }
 
 func TestGetCurrentMetrics_Success(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
-	// Mock successful response from prometheus service
-	expectedResponse := &models.MetricsResponse{
-		CurrentMetrics: map[string]float64{
-			"running_jobs": 5,
-			"queued_jobs":  3,
-		},
-		TimeSeries: struct {
-			RunningJobs models.TimeSeriesData `json:"running_jobs"`
-			QueuedJobs  models.TimeSeriesData `json:"queued_jobs"`
-		}{
-			RunningJobs: models.TimeSeriesData{
-				Status: "success",
-				Data: models.TimeSeriesDataInner{
-					ResultType: "matrix",
-					Result:     []models.TimeSeriesEntry{},
-				},
-			},
-			QueuedJobs: models.TimeSeriesData{
-				Status: "success",
-				Data: models.TimeSeriesDataInner{
-					ResultType: "matrix",
-					Result:     []models.TimeSeriesEntry{},
-				},
-			},
-		},
-	}
-
-	mockPrometheus.On("GetMetricsWithTimeSeries", "day", "", "", "").Return(expectedResponse, nil)
+	// Mock DB responses
+	mockDB.On("GetMetricsSummary", mock.Anything).Return(map[string]float64{
+		"running_jobs":   5,
+		"queued_jobs":    3,
+		"avg_queue_time": 0,
+		"peak_demand":    0,
+	}, nil)
+	mockDB.On("GetMetricsHistory", mock.Anything).Return([]models.MetricsSnapshot{}, nil)
 
 	router.GET("/api/current-metrics", handler.GetCurrentMetrics())
 
@@ -557,15 +519,14 @@ func TestGetCurrentMetrics_Success(t *testing.T) {
 	assert.Equal(t, float64(5), currentMetrics["running_jobs"])
 	assert.Equal(t, float64(3), currentMetrics["queued_jobs"])
 
-	mockPrometheus.AssertExpectations(t)
+	mockDB.AssertExpectations(t)
 }
 
-func TestGetCurrentMetrics_PrometheusError(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+func TestGetCurrentMetrics_DBError(t *testing.T) {
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
-	// Mock prometheus service error
-	mockPrometheus.On("GetMetricsWithTimeSeries", "day", "", "", "").Return((*models.MetricsResponse)(nil), errors.New("prometheus connection failed"))
+	mockDB.On("GetMetricsSummary", mock.Anything).Return(map[string]float64(nil), assert.AnError)
 
 	router.GET("/api/current-metrics", handler.GetCurrentMetrics())
 
@@ -576,46 +537,28 @@ func TestGetCurrentMetrics_PrometheusError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Contains(t, w.Body.String(), "Failed to retrieve metrics")
 
-	mockPrometheus.AssertExpectations(t)
+	mockDB.AssertExpectations(t)
 }
 
 func TestGetCurrentMetrics_WithTimeSeries(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
-	// Mock successful response with time series data
-	expectedResponse := &models.MetricsResponse{
-		CurrentMetrics: map[string]float64{
-			"running_jobs": 2,
-			"queued_jobs":  1,
-		},
-		TimeSeries: struct {
-			RunningJobs models.TimeSeriesData `json:"running_jobs"`
-			QueuedJobs  models.TimeSeriesData `json:"queued_jobs"`
-		}{
-			RunningJobs: models.TimeSeriesData{
-				Status: "success",
-				Data: models.TimeSeriesDataInner{
-					ResultType: "matrix",
-					Result:     []models.TimeSeriesEntry{},
-				},
-			},
-			QueuedJobs: models.TimeSeriesData{
-				Status: "success",
-				Data: models.TimeSeriesDataInner{
-					ResultType: "matrix",
-					Result:     []models.TimeSeriesEntry{},
-				},
-			},
-		},
-	}
-
-	mockPrometheus.On("GetMetricsWithTimeSeries", "hour", "2023-01-01T00:00:00Z", "2023-01-01T01:00:00Z", "60s").Return(expectedResponse, nil)
+	mockDB.On("GetMetricsSummary", mock.Anything).Return(map[string]float64{
+		"running_jobs":   2,
+		"queued_jobs":    1,
+		"avg_queue_time": 0,
+		"peak_demand":    0,
+	}, nil)
+	mockDB.On("GetMetricsHistory", mock.Anything).Return([]models.MetricsSnapshot{
+		{Timestamp: 1672531200, Running: 2, Queued: 1},
+		{Timestamp: 1672531260, Running: 3, Queued: 0},
+	}, nil)
 
 	router.GET("/api/current-metrics", handler.GetCurrentMetrics())
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/current-metrics?period=hour&start=2023-01-01T00:00:00Z&end=2023-01-01T01:00:00Z&step=60s", nil)
+	req, _ := http.NewRequest("GET", "/api/current-metrics?period=hour", nil)
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -631,12 +574,12 @@ func TestGetCurrentMetrics_WithTimeSeries(t *testing.T) {
 	assert.Equal(t, float64(2), currentMetrics["running_jobs"])
 	assert.Equal(t, float64(1), currentMetrics["queued_jobs"])
 
-	mockPrometheus.AssertExpectations(t)
+	mockDB.AssertExpectations(t)
 }
 
 func TestGetWorkflowJobsByRunID_InvalidRunID(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	router.GET("/api/workflow-jobs/:run_id", handler.GetWorkflowJobsByRunID())
 
@@ -652,8 +595,8 @@ func TestGetWorkflowJobsByRunID_InvalidRunID(t *testing.T) {
 }
 
 func TestGetWorkflowJobsByRunID_NoJobsFound(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	// Mock empty result from database
 	mockDB.On("GetWorkflowJobsByRunID", int64(1)).Return([]models.WorkflowJob{}, nil)
@@ -672,8 +615,8 @@ func TestGetWorkflowJobsByRunID_NoJobsFound(t *testing.T) {
 
 // Integration test for the ValidateOrigin middleware with GetWorkflowRuns
 func TestIntegration_ValidateOriginWithGetWorkflowRuns(t *testing.T) {
-	router, mockDB, testConfig, mockPrometheus := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
 
 	// Setup route with middleware
 	router.Use(ValidateOrigin())
@@ -756,8 +699,8 @@ func TestGetWorkflowRuns_PaginationEdgeCases(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			router, mockDB, testConfig, mockPrometheus := setupAPITest()
-			handler := NewAPIHandler(testConfig, mockDB, mockPrometheus)
+			router, mockDB, testConfig := setupAPITest()
+			handler := NewAPIHandler(testConfig, mockDB)
 
 			expectedRuns := []models.WorkflowRun{}
 			mockDB.On("GetWorkflowRunsPaginated", tc.expectedPage, tc.expectedLimit).Return(expectedRuns, 0, nil)

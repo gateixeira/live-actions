@@ -8,7 +8,6 @@ import (
 
 	"github.com/gateixeira/live-actions/internal/config"
 	"github.com/gateixeira/live-actions/internal/database"
-	"github.com/gateixeira/live-actions/internal/services"
 	"github.com/gateixeira/live-actions/models"
 	"github.com/gateixeira/live-actions/pkg/logger"
 	"github.com/gateixeira/live-actions/pkg/metrics"
@@ -16,17 +15,15 @@ import (
 )
 
 type WorkflowJobHandler struct {
-	mutex             sync.RWMutex
-	db                database.DatabaseInterface
-	prometheusService services.PrometheusServiceInterface
-	config            *config.Config
+	mutex  sync.RWMutex
+	db     database.DatabaseInterface
+	config *config.Config
 }
 
-func NewWorkflowJobHandler(config *config.Config, db database.DatabaseInterface, promSvc services.PrometheusServiceInterface) *WorkflowJobHandler {
+func NewWorkflowJobHandler(config *config.Config, db database.DatabaseInterface) *WorkflowJobHandler {
 	return &WorkflowJobHandler{
-		db:                db,
-		prometheusService: promSvc,
-		config:            config,
+		db:     db,
+		config: config,
 	}
 }
 

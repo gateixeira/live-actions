@@ -19,6 +19,11 @@ type DatabaseInterface interface {
 	AddOrUpdateRun(workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error)
 	GetWorkflowRunsPaginated(page int, limit int) ([]models.WorkflowRun, int, error)
 
+	// Metrics Snapshots
+	InsertMetricsSnapshot(running, queued int) error
+	GetMetricsHistory(since time.Duration) ([]models.MetricsSnapshot, error)
+	GetMetricsSummary(since time.Duration) (map[string]float64, error)
+
 	// Webhook Events
 	StoreWebhookEvent(event *models.OrderedEvent) error
 	GetPendingEventsGrouped(limit int) ([]*models.OrderedEvent, error)

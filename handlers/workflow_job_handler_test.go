@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func setupWorkflowJobTest() (*database.MockDatabase, *config.Config, *MockPrometheusService) {
+func setupWorkflowJobTest() (*database.MockDatabase, *config.Config) {
 	// Initialize logger for tests
 	logger.InitLogger("error")
 
@@ -31,37 +31,34 @@ func setupWorkflowJobTest() (*database.MockDatabase, *config.Config, *MockPromet
 
 	testConfig := &config.Config{
 		Vars: config.Vars{
-			PrometheusURL: "http://localhost:9090",
 		},
 		RunnerTypeConfig: runnerTypeConfig,
 	}
 
-	mockPrometheus := &MockPrometheusService{}
 
-	return &database.MockDatabase{}, testConfig, mockPrometheus
+	return &database.MockDatabase{}, testConfig
 }
 
 func TestNewWorkflowJobHandler(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	assert.NotNil(t, handler, "NewWorkflowJobHandler should return a non-nil handler")
 	assert.Equal(t, mockDB, handler.db, "Handler should store the database interface")
-	assert.Equal(t, mockPrometheus, handler.prometheusService, "Handler should store the prometheus interface")
 	// Note: Cannot test mutex directly due to Go's lock copying restrictions
 }
 
 func TestWorkflowJobHandler_GetEventType(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	eventType := handler.GetEventType()
 	assert.Equal(t, "workflow_job", eventType, "GetEventType should return 'workflow_job'")
 }
 
 func TestWorkflowJobHandler_InferRunnerType(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	testCases := []struct {
 		name     string
@@ -104,8 +101,8 @@ func TestWorkflowJobHandler_InferRunnerType(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_HandleEvent_Success(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	// Create test data
 	now := time.Now()
@@ -181,8 +178,8 @@ func TestWorkflowJobHandler_HandleEvent_Success(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_HandleEvent_InvalidJSON(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	sequence := &models.EventSequence{
 		EventID:    "event123",
@@ -199,8 +196,8 @@ func TestWorkflowJobHandler_HandleEvent_InvalidJSON(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_HandleEvent_DatabaseGetJobError(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	now := time.Now()
 	sequence := &models.EventSequence{
@@ -255,8 +252,8 @@ func TestWorkflowJobHandler_HandleEvent_DatabaseGetJobError(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_HandleEvent_DatabaseAddJobError(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	now := time.Now()
 	sequence := &models.EventSequence{
@@ -340,8 +337,8 @@ func TestWorkflowJobHandler_HandleEvent_DifferentActions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-			handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+			mockDB, testConfig := setupWorkflowJobTest()
+			handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 			now := time.Now()
 			sequence := &models.EventSequence{
@@ -433,8 +430,8 @@ func TestWorkflowJobHandler_HandleEvent_StatusTransitions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-			handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+			mockDB, testConfig := setupWorkflowJobTest()
+			handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 			now := time.Now()
 			sequence := &models.EventSequence{
@@ -493,8 +490,8 @@ func TestWorkflowJobHandler_HandleEvent_StatusTransitions(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_HandleEvent_WithStartedAtTime(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	now := time.Now()
 	createdAt := now.Add(-5 * time.Minute)
@@ -559,8 +556,8 @@ func TestWorkflowJobHandler_HandleEvent_WithStartedAtTime(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_HandleEvent_GetJobsByLabelError(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	now := time.Now()
 	sequence := &models.EventSequence{
@@ -614,8 +611,8 @@ func TestWorkflowJobHandler_HandleEvent_GetJobsByLabelError(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_HandleEvent_EmptyEventData(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	sequence := &models.EventSequence{
 		EventID:    "event123",
@@ -630,8 +627,8 @@ func TestWorkflowJobHandler_HandleEvent_EmptyEventData(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_HandleEvent_MinimalRequiredFields(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	now := time.Now()
 	sequence := &models.EventSequence{
@@ -686,8 +683,8 @@ func TestWorkflowJobHandler_HandleEvent_MinimalRequiredFields(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_ExtractEventTimestamp(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	testCases := []struct {
 		name           string
@@ -744,8 +741,8 @@ func TestWorkflowJobHandler_ExtractEventTimestamp(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_ExtractOrderingKey(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	testCases := []struct {
 		name           string
@@ -794,8 +791,8 @@ func TestWorkflowJobHandler_ExtractOrderingKey(t *testing.T) {
 }
 
 func TestWorkflowJobHandler_GetStatusPriority(t *testing.T) {
-	mockDB, testConfig, mockPrometheus := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB, mockPrometheus)
+	mockDB, testConfig := setupWorkflowJobTest()
+	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
 	testCases := []struct {
 		name             string

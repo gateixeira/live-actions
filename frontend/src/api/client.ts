@@ -57,18 +57,6 @@ export async function getWorkflowJobs(
   return fetchJson(`/api/workflow-jobs/${runId}`)
 }
 
-function periodParams(period: Period) {
-  const now = Math.floor(Date.now() / 1000)
-  const ranges: Record<Period, { seconds: number; step: string }> = {
-    hour: { seconds: 3600, step: '15s' },
-    day: { seconds: 86400, step: '5m' },
-    week: { seconds: 604800, step: '30m' },
-    month: { seconds: 2592000, step: '2h' },
-  }
-  const r = ranges[period]
-  return `period=${period}&start=${now - r.seconds}&end=${now}&step=${r.step}`
-}
-
 export async function getMetrics(period: Period): Promise<MetricsResponse> {
-  return fetchJson(`/api/metrics/query_range?${periodParams(period)}`)
+  return fetchJson(`/api/metrics/query_range?period=${period}`)
 }

@@ -6,25 +6,24 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/gateixeira/live-actions/internal/config"
 	"github.com/gateixeira/live-actions/internal/database"
-	"github.com/gateixeira/live-actions/internal/services"
 	"github.com/gateixeira/live-actions/internal/utils"
+	"github.com/gateixeira/live-actions/models"
 	"github.com/gateixeira/live-actions/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 type APIHandler struct {
-	db                database.DatabaseInterface
-	prometheusService services.PrometheusServiceInterface
+	db database.DatabaseInterface
 }
 
-func NewAPIHandler(config *config.Config, db database.DatabaseInterface, promSvc services.PrometheusServiceInterface) *APIHandler {
+func NewAPIHandler(config *config.Config, db database.DatabaseInterface) *APIHandler {
 	return &APIHandler{
-		db:                db,
-		prometheusService: promSvc,
+		db: db,
 	}
 }
 
@@ -186,22 +185,73 @@ func (h *APIHandler) GetLabelMetrics() gin.HandlerFunc {
 	}
 }
 
-// GetCurrentMetrics returns current calculated metrics using PromQL
+// GetCurrentMetrics returns current metrics and time-series data from the database.
 func (h *APIHandler) GetCurrentMetrics() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Check if this is a time series query (query_range parameters)
-		start := c.Query("start")
-		end := c.Query("end")
-		step := c.Query("step")
 		period := c.DefaultQuery("period", "day")
 
-		results, err := h.prometheusService.GetMetricsWithTimeSeries(period, start, end, step)
+		since := periodToDuration(period)
+
+		summary, err := h.db.GetMetricsSummary(since)
 		if err != nil {
-			logger.Logger.Error("Failed to get metrics with time series", zap.Error(err))
+			logger.Logger.Error("Failed to get metrics summary", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve metrics"})
 			return
 		}
-		c.JSON(http.StatusOK, results)
+
+		snapshots, err := h.db.GetMetricsHistory(since)
+		if err != nil {
+			logger.Logger.Error("Failed to get metrics history", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve metrics"})
+			return
+		}
+
+		// Build response in the same shape the frontend expects (Prometheus-compatible).
+		runningValues := make([][]interface{}, len(snapshots))
+		queuedValues := make([][]interface{}, len(snapshots))
+		for i, s := range snapshots {
+			runningValues[i] = []interface{}{s.Timestamp, fmt.Sprintf("%d", s.Running)}
+			queuedValues[i] = []interface{}{s.Timestamp, fmt.Sprintf("%d", s.Queued)}
+		}
+
+		response := &models.MetricsResponse{
+			CurrentMetrics: summary,
+		}
+		response.TimeSeries.RunningJobs = models.TimeSeriesData{
+			Status: "success",
+			Data: models.TimeSeriesDataInner{
+				ResultType: "matrix",
+				Result: []models.TimeSeriesEntry{{
+					Metric: map[string]string{"job_status": "running"},
+					Values: runningValues,
+				}},
+			},
+		}
+		response.TimeSeries.QueuedJobs = models.TimeSeriesData{
+			Status: "success",
+			Data: models.TimeSeriesDataInner{
+				ResultType: "matrix",
+				Result: []models.TimeSeriesEntry{{
+					Metric: map[string]string{"job_status": "queued"},
+					Values: queuedValues,
+				}},
+			},
+		}
+
+		c.JSON(http.StatusOK, response)
+	}
+}
+
+func periodToDuration(period string) time.Duration {
+	switch period {
+	case "hour":
+		return time.Hour
+	case "week":
+		return 7 * 24 * time.Hour
+	case "month":
+		return 30 * 24 * time.Hour
+	default:
+		return 24 * time.Hour
 	}
 }
 

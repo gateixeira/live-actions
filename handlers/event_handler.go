@@ -18,23 +18,21 @@ type EventHandler interface {
 }
 
 type WebhookHandler struct {
-	db                database.DatabaseInterface
-	handlers          map[string]EventHandler
-	orderingService   *services.EventOrderingService
-	prometheusService services.PrometheusServiceInterface
+	db              database.DatabaseInterface
+	handlers        map[string]EventHandler
+	orderingService *services.EventOrderingService
 }
 
-func NewWebhookHandler(config *config.Config, db database.DatabaseInterface, promSvc services.PrometheusServiceInterface) *WebhookHandler {
+func NewWebhookHandler(config *config.Config, db database.DatabaseInterface) *WebhookHandler {
 	wh := &WebhookHandler{
-		db:                db,
-		prometheusService: promSvc,
-		handlers:          make(map[string]EventHandler),
+		db:       db,
+		handlers: make(map[string]EventHandler),
 	}
 
 	wh.orderingService = services.NewEventOrderingService(db, wh.processOrderedEvent)
 	wh.orderingService.Start()
 
-	wh.RegisterHandler(NewWorkflowJobHandler(config, db, promSvc))
+	wh.RegisterHandler(NewWorkflowJobHandler(config, db))
 	wh.RegisterHandler(NewWorkflowRunHandler(db))
 
 	return wh
