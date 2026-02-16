@@ -148,11 +148,11 @@ func TestWorkflowJobHandler_HandleEvent_Success(t *testing.T) {
 	// Set up mock expectations for metrics update
 	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
 		"self-hosted": {
-			"running": 1,
+			"in_progress": 1,
 			"queued":  0,
 		},
 		"github-hosted": {
-			"running": 0,
+			"in_progress": 0,
 			"queued":  2,
 		},
 	}, nil)
@@ -236,7 +236,7 @@ func TestWorkflowJobHandler_HandleEvent_DatabaseGetJobError(t *testing.T) {
 	// Set up mock expectations for metrics update
 	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
 		"github-hosted": {
-			"running": 0,
+			"in_progress": 0,
 			"queued":  1,
 		},
 	}, nil)
@@ -378,7 +378,7 @@ func TestWorkflowJobHandler_HandleEvent_DifferentActions(t *testing.T) {
 			// Set up mock expectations for metrics update
 			mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
 				string(tc.expectedRunnerType): {
-					"running": 1,
+					"in_progress": 1,
 					"queued":  0,
 				},
 			}, nil)
@@ -472,7 +472,7 @@ func TestWorkflowJobHandler_HandleEvent_StatusTransitions(t *testing.T) {
 			// Set up mock expectations for metrics update
 			mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
 				"github-hosted": {
-					"running": 1,
+					"in_progress": 1,
 					"queued":  0,
 				},
 			}, nil)
@@ -538,7 +538,7 @@ func TestWorkflowJobHandler_HandleEvent_WithStartedAtTime(t *testing.T) {
 	// Set up mock expectations for metrics update
 	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
 		"github-hosted": {
-			"running": 1,
+			"in_progress": 1,
 			"queued":  0,
 		},
 	}, nil)
@@ -595,7 +595,7 @@ func TestWorkflowJobHandler_HandleEvent_GetJobsByLabelError(t *testing.T) {
 	// Set up mock expectations for metrics update
 	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
 		"github-hosted": {
-			"running": 0,
+			"in_progress": 0,
 			"queued":  0,
 		},
 	}, nil)
@@ -667,7 +667,7 @@ func TestWorkflowJobHandler_HandleEvent_MinimalRequiredFields(t *testing.T) {
 	// Set up mock expectations for metrics update
 	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
 		"github-hosted": {
-			"running": 0,
+			"in_progress": 0,
 			"queued":  1,
 		},
 	}, nil)

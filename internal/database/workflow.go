@@ -358,8 +358,8 @@ func (db *DBWrapper) GetCurrentJobCounts() (map[string]map[string]int, error) {
 		}
 
 		result[runnerType] = map[string]int{
-			"queued":  queuedCount,
-			"running": inProgressCount,
+			"queued":      queuedCount,
+			"in_progress": inProgressCount,
 		}
 	}
 

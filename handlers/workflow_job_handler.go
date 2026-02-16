@@ -106,7 +106,7 @@ func (h *WorkflowJobHandler) sendMetricsUpdate() {
 	// Calculate totals from database data
 	var runningTotal, queuedTotal int
 	for _, statusCounts := range jobCounts {
-		runningTotal += statusCounts["running"]
+		runningTotal += statusCounts["in_progress"]
 		queuedTotal += statusCounts["queued"]
 	}
 
