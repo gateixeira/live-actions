@@ -9,11 +9,10 @@ import (
 type Vars struct {
 	WebhookSecret        string
 	Port                 string
-	DatabaseURL          string
+	DatabasePath         string
 	LogLevel             string
 	TLSEnabled           bool
 	Environment          string
-	Labels               []string
 	DataRetentionDays    int
 	CleanupIntervalHours int
 }
@@ -27,7 +26,7 @@ func NewConfig() *Config {
 	vars := Vars{
 		WebhookSecret:        os.Getenv("WEBHOOK_SECRET"),
 		Port:                 getEnvOrDefault("PORT", "8080"),
-		DatabaseURL:          getEnvOrDefault("DATABASE_URL", "./data/live-actions.db"),
+		DatabasePath:         getEnvOrDefault("DATABASE_PATH", "./data/live-actions.db"),
 		LogLevel:             getEnvOrDefault("LOG_LEVEL", "info"),
 		TLSEnabled:           getEnvOrDefault("TLS_ENABLED", "false") == "true",
 		Environment:          getEnvOrDefault("ENVIRONMENT", "development"),
@@ -41,9 +40,6 @@ func NewConfig() *Config {
 	if config.IsProduction() {
 		if vars.WebhookSecret == "" {
 			panic("WEBHOOK_SECRET is required in production")
-		}
-		if vars.DatabaseURL == "" {
-			panic("DATABASE_URL is required in production")
 		}
 	}
 
@@ -67,8 +63,8 @@ func getEnvOrDefaultInt(key string, defaultValue int) int {
 	return defaultValue
 }
 
-func (c *Config) GetDSN() string {
-	return c.Vars.DatabaseURL
+func (c *Config) GetDatabasePath() string {
+	return c.Vars.DatabasePath
 }
 
 // IsProduction returns true if running in production environment

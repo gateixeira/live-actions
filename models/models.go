@@ -33,6 +33,7 @@ type WorkflowJob struct {
 	Name        string    `json:"name" binding:"required"`
 	Status      JobStatus `json:"status" binding:"required"`
 	Labels      []string  `json:"labels" binding:"required"`
+	HtmlUrl     string    `json:"html_url"`
 	Conclusion  string    `json:"conclusion"`
 	CreatedAt   time.Time `json:"created_at" binding:"required"`
 	StartedAt   time.Time `json:"started_at"`

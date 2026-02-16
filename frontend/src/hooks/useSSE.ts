@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MetricsUpdateEvent, WorkflowUpdateEvent } from '../api/types'
 
 interface SSECallbacks {

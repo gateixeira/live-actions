@@ -1,4 +1,4 @@
-import { Box, Heading, Text, CounterLabel } from '@primer/react'
+import { Box, Heading, Text } from '@primer/react'
 
 interface Props {
   running: number
@@ -19,7 +19,7 @@ function formatSeconds(s: number): string {
   return rm > 0 ? `${h}h ${rm}m` : `${h}h`
 }
 
-function Card({ label, value, variant }: { label: string; value: React.ReactNode; variant?: string }) {
+function Card({ label, value }: { label: string; value: React.ReactNode; variant?: string }) {
   return (
     <Box
       sx={{

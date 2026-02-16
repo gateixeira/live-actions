@@ -15,8 +15,8 @@ func TestNewConfig(t *testing.T) {
 		if config.Vars.Port != "8080" {
 			t.Errorf("Expected Port to be 8080, got %s", config.Vars.Port)
 		}
-		if config.Vars.DatabaseURL != "./data/live-actions.db" {
-			t.Errorf("Expected DatabaseURL to be ./data/live-actions.db, got %s", config.Vars.DatabaseURL)
+		if config.Vars.DatabasePath != "./data/live-actions.db" {
+			t.Errorf("Expected DatabasePath to be ./data/live-actions.db, got %s", config.Vars.DatabasePath)
 		}
 		if config.Vars.LogLevel != "info" {
 			t.Errorf("Expected LogLevel to be info, got %s", config.Vars.LogLevel)
@@ -27,7 +27,7 @@ func TestNewConfig(t *testing.T) {
 		// Set custom environment variables
 		os.Setenv("WEBHOOK_SECRET", "test-secret")
 		os.Setenv("PORT", "3000")
-		os.Setenv("DATABASE_URL", "test.db")
+		os.Setenv("DATABASE_PATH", "test.db")
 		os.Setenv("LOG_LEVEL", "debug")
 
 		config := NewConfig()
@@ -38,8 +38,8 @@ func TestNewConfig(t *testing.T) {
 		if config.Vars.Port != "3000" {
 			t.Errorf("Expected Port to be 3000, got %s", config.Vars.Port)
 		}
-		if config.Vars.DatabaseURL != "test.db" {
-			t.Errorf("Expected DatabaseURL to be test.db, got %s", config.Vars.DatabaseURL)
+		if config.Vars.DatabasePath != "test.db" {
+			t.Errorf("Expected DatabasePath to be test.db, got %s", config.Vars.DatabasePath)
 		}
 		if config.Vars.LogLevel != "debug" {
 			t.Errorf("Expected LogLevel to be debug, got %s", config.Vars.LogLevel)
@@ -47,24 +47,24 @@ func TestNewConfig(t *testing.T) {
 	})
 }
 
-func TestGetDSN(t *testing.T) {
+func TestGetDatabasePath(t *testing.T) {
 	os.Clearenv()
 
 	t.Run("with default values", func(t *testing.T) {
 		config := NewConfig()
 		expected := "./data/live-actions.db"
-		if dsn := config.GetDSN(); dsn != expected {
-			t.Errorf("Expected DSN %s, got %s", expected, dsn)
+		if p := config.GetDatabasePath(); p != expected {
+			t.Errorf("Expected DatabasePath %s, got %s", expected, p)
 		}
 	})
 
 	t.Run("with custom values", func(t *testing.T) {
-		os.Setenv("DATABASE_URL", "custom.db")
+		os.Setenv("DATABASE_PATH", "custom.db")
 
 		config := NewConfig()
 		expected := "custom.db"
-		if dsn := config.GetDSN(); dsn != expected {
-			t.Errorf("Expected DSN %s, got %s", expected, dsn)
+		if p := config.GetDatabasePath(); p != expected {
+			t.Errorf("Expected DatabasePath %s, got %s", expected, p)
 		}
 	})
 }

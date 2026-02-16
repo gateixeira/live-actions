@@ -51,9 +51,9 @@ func TestSecurityHeaders(t *testing.T) {
 		{
 			name:           "Content-Security-Policy header",
 			expectedHeader: "Content-Security-Policy",
-			expectedValue: "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
-				"style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data:; " +
-				"font-src 'self' https:; connect-src 'self'; frame-ancestors 'none'; " +
+			expectedValue: "default-src 'self'; script-src 'self'; " +
+				"style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+				"font-src 'self'; connect-src 'self'; frame-ancestors 'none'; " +
 				"base-uri 'self'; form-action 'self'",
 		},
 		{
@@ -201,10 +201,10 @@ func TestSecurityHeaders_CSPConfiguration(t *testing.T) {
 	// Verify CSP contains expected directives
 	expectedDirectives := []string{
 		"default-src 'self'",
-		"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
-		"style-src 'self' 'unsafe-inline' https://unpkg.com",
+		"script-src 'self'",
+		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data:",
-		"font-src 'self' https:",
+		"font-src 'self'",
 		"connect-src 'self'",
 		"frame-ancestors 'none'",
 		"base-uri 'self'",

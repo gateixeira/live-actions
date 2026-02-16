@@ -23,11 +23,12 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 
 		// Content Security Policy - restrictive policy for the application
+		// Note: style-src 'unsafe-inline' is required by styled-components (Primer React)
 		csp := "default-src 'self'; " +
-			"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
-			"style-src 'self' 'unsafe-inline' https://unpkg.com; " +
+			"script-src 'self'; " +
+			"style-src 'self' 'unsafe-inline'; " +
 			"img-src 'self' data:; " +
-			"font-src 'self' https:; " +
+			"font-src 'self'; " +
 			"connect-src 'self'; " +
 			"frame-ancestors 'none'; " +
 			"base-uri 'self'; " +

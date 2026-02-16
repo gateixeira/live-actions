@@ -58,12 +58,13 @@ func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimesta
 	}
 
 	_, err = tx.Exec(
-		`INSERT INTO workflow_jobs (id, name, status, labels, conclusion, created_at, started_at, completed_at, updated_at, run_id) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+		`INSERT INTO workflow_jobs (id, name, status, labels, html_url, conclusion, created_at, started_at, completed_at, updated_at, run_id) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
 		ON CONFLICT (id) DO UPDATE SET
 			name = excluded.name,
 			status = excluded.status,
 			labels = excluded.labels,
+			html_url = excluded.html_url,
 			conclusion = excluded.conclusion,
 			created_at = excluded.created_at,
 			started_at = excluded.started_at,
@@ -71,7 +72,7 @@ func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimesta
 			updated_at = datetime('now'),
 			run_id = excluded.run_id`,
 		workflowJob.ID, string(workflowJob.Name), string(workflowJob.Status), labelsToJSON(workflowJob.Labels),
-		string(workflowJob.Conclusion), workflowJob.CreatedAt.Format(time.RFC3339), formatNullableTime(workflowJob.StartedAt), formatNullableTime(workflowJob.CompletedAt), workflowJob.RunID,
+		workflowJob.HtmlUrl, string(workflowJob.Conclusion), workflowJob.CreatedAt.Format(time.RFC3339), formatNullableTime(workflowJob.StartedAt), formatNullableTime(workflowJob.CompletedAt), workflowJob.RunID,
 	)
 
 	if err != nil {
@@ -175,7 +176,7 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(page int, limit int) ([]models.Wor
 }
 
 func (db *DBWrapper) GetWorkflowJobsByRunID(runID int64) ([]models.WorkflowJob, error) {
-	rows, err := DB.Query("SELECT id, name, run_id, status, labels, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
+	rows, err := DB.Query("SELECT id, name, run_id, status, labels, html_url, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -186,11 +187,13 @@ func (db *DBWrapper) GetWorkflowJobsByRunID(runID int64) ([]models.WorkflowJob, 
 		var job models.WorkflowJob
 		var labelsJSON string
 		var createdAt string
+		var htmlUrl sql.NullString
 		var startedAt, completedAt sql.NullString
-		if err := rows.Scan(&job.ID, &job.Name, &job.RunID, &job.Status, &labelsJSON, &job.Conclusion, &createdAt, &startedAt, &completedAt); err != nil {
+		if err := rows.Scan(&job.ID, &job.Name, &job.RunID, &job.Status, &labelsJSON, &htmlUrl, &job.Conclusion, &createdAt, &startedAt, &completedAt); err != nil {
 			return nil, err
 		}
 		job.Labels = labelsFromJSON(labelsJSON)
+		job.HtmlUrl = htmlUrl.String
 		job.CreatedAt = parseTime(createdAt)
 		job.StartedAt = parseTime(startedAt.String)
 		job.CompletedAt = parseTime(completedAt.String)
@@ -205,15 +208,16 @@ func (db *DBWrapper) GetWorkflowJobByID(jobID int64) (models.WorkflowJob, error)
 	var job models.WorkflowJob
 	var labelsJSON string
 	var createdAt string
+	var htmlUrl sql.NullString
 	var startedAt, completedAt sql.NullString
 
 	err := DB.QueryRow(`
-		SELECT id, name, run_id, status, labels, conclusion, 
+		SELECT id, name, run_id, status, labels, html_url, conclusion, 
 			   created_at, started_at, completed_at 
 		FROM workflow_jobs 
 		WHERE id = ?`, jobID).Scan(
 		&job.ID, &job.Name, &job.RunID, &job.Status,
-		&labelsJSON, &job.Conclusion, &createdAt,
+		&labelsJSON, &htmlUrl, &job.Conclusion, &createdAt,
 		&startedAt, &completedAt)
 
 	if err != nil {
@@ -224,6 +228,7 @@ func (db *DBWrapper) GetWorkflowJobByID(jobID int64) (models.WorkflowJob, error)
 	}
 
 	job.Labels = labelsFromJSON(labelsJSON)
+	job.HtmlUrl = htmlUrl.String
 	job.CreatedAt = parseTime(createdAt)
 	job.StartedAt = parseTime(startedAt.String)
 	job.CompletedAt = parseTime(completedAt.String)

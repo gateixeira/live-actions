@@ -12,6 +12,11 @@ import {
 import type { WorkflowRun, WorkflowJob, Pagination } from '../api/types'
 import { getWorkflowRuns, getWorkflowJobs } from '../api/client'
 
+const MAX_TEXT_LEN = 50
+function truncate(text: string): string {
+  return text.length > MAX_TEXT_LEN ? text.slice(0, MAX_TEXT_LEN) + '…' : text
+}
+
 function StatusBadge({ status, conclusion }: { status: string; conclusion?: string }) {
   const effective = conclusion || status
   const map: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
@@ -59,8 +64,12 @@ function JobRow({ job }: { job: WorkflowJob }) {
         '&:hover': { bg: 'canvas.subtle' },
       }}
     >
-      <Box as="td" sx={{ p: 2, pl: 5, fontSize: 0 }}>
-        {job.name}
+      <Box as="td" sx={{ p: 2, pl: 5, fontSize: 0 }} title={job.name}>
+        {job.html_url ? (
+          <Link href={job.html_url} target="_blank" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            {truncate(job.name)}
+          </Link>
+        ) : truncate(job.name)}
       </Box>
       <Box as="td" sx={{ p: 2, fontSize: 0 }}>
         <StatusBadge status={job.status} conclusion={job.conclusion} />
@@ -87,7 +96,7 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
     setLoading(true)
     getWorkflowJobs(run.id)
       .then((r) => setJobs(r.workflow_jobs ?? []))
-      .catch(() => setJobs([]))
+      .catch((err) => { console.error('Failed to load jobs', err); setJobs([]) })
       .finally(() => setLoading(false))
   }, [expanded, run.id, refresh])
 
@@ -106,14 +115,14 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
             {run.id}
           </Link>
         </Box>
-        <Box as="td" sx={{ p: 2, fontSize: 1 }}>
-          {run.name}
+        <Box as="td" sx={{ p: 2, fontSize: 1 }} title={run.name}>
+          {truncate(run.name)}
         </Box>
         <Box as="td" sx={{ p: 2, fontSize: 0, color: 'fg.muted' }}>
           {run.repository_name}
         </Box>
-        <Box as="td" sx={{ p: 2, fontSize: 0 }}>
-          {run.display_title}
+        <Box as="td" sx={{ p: 2, fontSize: 0 }} title={run.display_title}>
+          {truncate(run.display_title)}
         </Box>
         <Box as="td" sx={{ p: 2, fontSize: 0 }}>
           <StatusBadge status={run.status} conclusion={run.conclusion} />
@@ -175,12 +184,11 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
   )
 }
 
-export function WorkflowTable({ ready }: { ready: boolean }) {
+export function WorkflowTable({ ready, refreshSignal }: { ready: boolean; refreshSignal: number }) {
   const [runs, setRuns] = useState<WorkflowRun[]>([])
   const [pagination, setPagination] = useState<Pagination | null>(null)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
-  const [refresh, setRefresh] = useState(0)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -189,23 +197,14 @@ export function WorkflowTable({ ready }: { ready: boolean }) {
         setRuns(r.workflow_runs ?? [])
         setPagination(r.pagination)
       })
-      .catch(() => setRuns([]))
+      .catch((err) => { console.error('Failed to load workflow runs', err); setRuns([]) })
       .finally(() => setLoading(false))
   }, [page])
 
   useEffect(() => {
     if (!ready) return
     load()
-  }, [load, ready])
-
-  // Expose a trigger for SSE refreshes
-  const triggerRefresh = useCallback(() => {
-    setRefresh((r) => r + 1)
-    load()
-  }, [load])
-
-  // Store ref for external access
-  ;(WorkflowTable as any)._refresh = triggerRefresh
+  }, [load, ready, refreshSignal])
 
   return (
     <Box>
@@ -256,7 +255,7 @@ export function WorkflowTable({ ready }: { ready: boolean }) {
                 </Box>
               </Box>
             ) : (
-              runs.map((run) => <RunRow key={run.id} run={run} refresh={refresh} />)
+              runs.map((run) => <RunRow key={run.id} run={run} refresh={refreshSignal} />)
             )}
           </Box>
         </Box>

@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS workflow_jobs (
     run_id INTEGER NOT NULL,
     status TEXT NOT NULL,
     labels TEXT,
+    html_url TEXT,
     conclusion TEXT,
     created_at TEXT NOT NULL,
     started_at TEXT,

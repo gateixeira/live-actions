@@ -24,6 +24,7 @@ export interface WorkflowJob {
   name: string
   status: JobStatus
   labels: string[]
+  html_url: string
   conclusion: string
   created_at: string
   started_at: string

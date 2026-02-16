@@ -24,7 +24,7 @@ export default function App() {
     (p: Period) => {
       getMetrics(p)
         .then(setMetricsData)
-        .catch(() => {})
+        .catch((err) => console.error('Failed to load metrics', err))
     },
     [],
   )
@@ -36,14 +36,15 @@ export default function App() {
     return () => clearInterval(interval)
   }, [period, loadMetrics, ready])
 
+  const [workflowRefresh, setWorkflowRefresh] = useState(0)
+
   useSSE({
     onMetricsUpdate: (data) => {
       setLiveRunning(data.running_jobs)
       setLiveQueued(data.queued_jobs)
     },
     onWorkflowUpdate: () => {
-      // Trigger table refresh via the static ref
-      ;(WorkflowTable as any)._refresh?.()
+      setWorkflowRefresh((r) => r + 1)
     },
   })
 
@@ -86,7 +87,7 @@ export default function App() {
               }}
             />
 
-            <WorkflowTable ready={ready} />
+            <WorkflowTable ready={ready} refreshSignal={workflowRefresh} />
           </Box>
         </Box>
       </BaseStyles>

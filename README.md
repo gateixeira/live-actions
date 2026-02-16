@@ -73,7 +73,7 @@ docker run -p 8080:8080 \
 |----------|---------|-------------|
 | `WEBHOOK_SECRET` | *(required)* | Secret for GitHub webhook validation |
 | `PORT` | `8080` | Server port |
-| `DATABASE_URL` | `./data/live-actions.db` | SQLite database path |
+| `DATABASE_PATH` | `./data/live-actions.db` | SQLite database file path |
 | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
 | `ENVIRONMENT` | `development` | Environment (`development` or `production`) |
 | `TLS_ENABLED` | `false` | Enable HTTPS cookie flags |
@@ -125,7 +125,7 @@ Update your GitHub webhook URL to the ngrok HTTPS URL (e.g., `https://a1b2c3d4.n
 
 Live Actions is a single Go binary with all assets embedded:
 
-- **Database**: SQLite (stored at `DATABASE_URL`, default `./data/live-actions.db`)
+- **Database**: SQLite (stored at `DATABASE_PATH`, default `./data/live-actions.db`)
 - **Frontend**: React + Primer (embedded via `go:embed`)
 - **Metrics**: `/metrics` endpoint for external Prometheus scraping; charts powered by internal SQLite snapshots
 
