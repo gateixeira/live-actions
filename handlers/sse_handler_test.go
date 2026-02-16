@@ -155,8 +155,7 @@ func TestSSEHandler_HandleSSE_Headers(t *testing.T) {
 	assert.Equal(t, "text/event-stream", w.Header().Get("Content-Type"))
 	assert.Equal(t, "no-cache", w.Header().Get("Cache-Control"))
 	assert.Equal(t, "keep-alive", w.Header().Get("Connection"))
-	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
-	assert.Equal(t, "Cache-Control", w.Header().Get("Access-Control-Allow-Headers"))
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
 }
 
 func TestSSEHandler_HandleSSE_InitialConnectionEvent(t *testing.T) {
