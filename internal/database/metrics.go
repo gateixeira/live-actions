@@ -18,7 +18,7 @@ func (d *DBWrapper) InsertMetricsSnapshot(running, queued int) error {
 
 // GetMetricsHistory returns time-series snapshots within the given duration.
 func (d *DBWrapper) GetMetricsHistory(since time.Duration) ([]models.MetricsSnapshot, error) {
-	cutoff := time.Now().UTC().Add(-since).Format(time.RFC3339)
+	cutoff := time.Now().UTC().Add(-since).Format("2006-01-02 15:04:05")
 	rows, err := DB.Query(
 		`SELECT timestamp, running_jobs, queued_jobs
 		 FROM metrics_snapshots
@@ -37,9 +37,9 @@ func (d *DBWrapper) GetMetricsHistory(since time.Duration) ([]models.MetricsSnap
 		if err := rows.Scan(&ts, &s.Running, &s.Queued); err != nil {
 			return nil, fmt.Errorf("failed to scan metrics snapshot: %w", err)
 		}
-		t, _ := time.Parse(time.RFC3339, ts)
+		t, _ := time.Parse("2006-01-02 15:04:05", ts)
 		if t.IsZero() {
-			t, _ = time.Parse("2006-01-02 15:04:05", ts)
+			t, _ = time.Parse(time.RFC3339, ts)
 		}
 		s.Timestamp = t.Unix()
 		snapshots = append(snapshots, s)
@@ -69,7 +69,8 @@ func (d *DBWrapper) GetMetricsSummary(since time.Duration) (map[string]float64, 
 	result["running_jobs"] = running
 	result["queued_jobs"] = queued
 
-	cutoff := time.Now().UTC().Add(-since).Format(time.RFC3339)
+	// workflow_jobs stores timestamps as RFC3339
+	jobsCutoff := time.Now().UTC().Add(-since).Format(time.RFC3339)
 
 	// Average queue time: average seconds between created_at and started_at for
 	// jobs that started within the period.
@@ -77,15 +78,18 @@ func (d *DBWrapper) GetMetricsSummary(since time.Duration) (map[string]float64, 
 	err := DB.QueryRow(`SELECT COALESCE(AVG(
 		(julianday(started_at) - julianday(created_at)) * 86400
 	), 0) FROM workflow_jobs
-	WHERE started_at IS NOT NULL AND started_at >= ?`, cutoff).Scan(&avgQueue)
+	WHERE started_at IS NOT NULL AND started_at >= ?`, jobsCutoff).Scan(&avgQueue)
 	if err == nil {
 		result["avg_queue_time"] = avgQueue
 	}
 
+	// metrics_snapshots stores timestamps as datetime (no T, no Z)
+	snapshotsCutoff := time.Now().UTC().Add(-since).Format("2006-01-02 15:04:05")
+
 	// Peak demand from snapshots (max of running + queued in the period)
 	var peak float64
 	err = DB.QueryRow(`SELECT COALESCE(MAX(running_jobs + queued_jobs), 0)
-		FROM metrics_snapshots WHERE timestamp >= ?`, cutoff).Scan(&peak)
+		FROM metrics_snapshots WHERE timestamp >= ?`, snapshotsCutoff).Scan(&peak)
 	if err == nil {
 		result["peak_demand"] = peak
 	}
