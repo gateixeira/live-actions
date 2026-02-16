@@ -42,7 +42,6 @@ func (h *WorkflowJobHandler) HandleEvent(eventData []byte, sequence *models.Even
 	}
 
 	event.WorkflowJob.Status = models.JobStatus(event.Action)
-	event.WorkflowJob.RunnerType = h.inferRunnerType(event.WorkflowJob.Labels)
 
 	// Get the previous state of this job from database to handle transitions correctly
 	previousJob, err := h.db.GetWorkflowJobByID(event.WorkflowJob.ID)
@@ -95,83 +94,52 @@ func (h *WorkflowJobHandler) HandleEvent(eventData []byte, sequence *models.Even
 }
 
 func (h *WorkflowJobHandler) sendMetricsUpdate() {
-
-	// Query database for current job counts directly (same source as label metrics)
-	jobCounts, err := h.db.GetCurrentJobCounts()
+	// Query database for current job counts
+	running, queued, err := h.db.GetCurrentJobCounts()
 	if err != nil {
 		logger.Logger.Error("Failed to query current job counts", zap.Error(err))
 		return
 	}
 
-	// Calculate totals from database data
-	var runningTotal, queuedTotal int
-	for _, statusCounts := range jobCounts {
-		runningTotal += statusCounts["in_progress"]
-		queuedTotal += statusCounts["queued"]
-	}
-
-	// Fetch label metrics from database
-	labelMetrics, _, err := h.db.GetJobsByLabel(1, 10) // Get first 10 label metrics
-	if err != nil {
-		logger.Logger.Error("Failed to query label metrics", zap.Error(err))
-		// Continue without label metrics rather than failing the entire update
-		labelMetrics = []models.LabelMetrics{}
-	}
-
 	// Convert to the expected format for SSE
-	metrics := models.MetricsUpdateEvent{
-		RunningJobs:  runningTotal,
-		QueuedJobs:   queuedTotal,
-		Timestamp:    time.Now().Format(time.RFC3339),
-		LabelMetrics: labelMetrics,
+	metricsUpdate := models.MetricsUpdateEvent{
+		RunningJobs: running,
+		QueuedJobs:  queued,
+		Timestamp:   time.Now().Format(time.RFC3339),
 	}
 
 	logger.Logger.Debug("Sending metrics update",
-		zap.Int("running_jobs", metrics.RunningJobs),
-		zap.Int("queued_jobs", metrics.QueuedJobs),
-		zap.Int("label_metrics_count", len(metrics.LabelMetrics)))
+		zap.Int("running_jobs", metricsUpdate.RunningJobs),
+		zap.Int("queued_jobs", metricsUpdate.QueuedJobs))
 
-	SendMetricsUpdate(metrics)
+	SendMetricsUpdate(metricsUpdate)
 }
 
 // handleJobStatusTransition manages state transitions correctly between job statuses
 func (h *WorkflowJobHandler) handleJobStatusTransition(previousStatus, currentStatus models.JobStatus, job models.WorkflowJob) {
 	metricsRegistry := metrics.GetRegistry()
-	runnerType := string(job.RunnerType)
 
 	// Skip if status hasn't actually changed
 	if previousStatus == currentStatus {
 		logger.Logger.Debug("Job status unchanged, skipping metrics update",
 			zap.Int64("job_id", job.ID),
-			zap.String("status", string(currentStatus)),
-			zap.String("runner_type", runnerType))
+			zap.String("status", string(currentStatus)))
 		return
 	}
 
 	logger.Logger.Debug("Handling job status transition",
 		zap.Int64("job_id", job.ID),
 		zap.String("from", string(previousStatus)),
-		zap.String("to", string(currentStatus)),
-		zap.String("runner_type", runnerType))
+		zap.String("to", string(currentStatus)))
 
 	// Record queue duration if transitioning from queued
 	if previousStatus == models.JobStatusQueued && !job.StartedAt.IsZero() {
 		queueTime := job.StartedAt.Sub(job.CreatedAt)
-		metricsRegistry.RecordQueueDuration(job.RunnerType, queueTime.Seconds())
+		metricsRegistry.RecordQueueDuration(queueTime.Seconds())
 		logger.Logger.Debug("Queue time recorded",
 			zap.Int64("job_id", job.ID),
-			zap.Duration("queue_time", queueTime),
-			zap.String("runner_type", runnerType))
+			zap.Duration("queue_time", queueTime))
 	}
-
-	logger.Logger.Debug("Job status transition recorded for database-driven metrics",
-		zap.String("from_status", string(previousStatus)),
-		zap.String("to_status", string(currentStatus)),
-		zap.String("runner_type", string(runnerType)))
-}
-
-func (h *WorkflowJobHandler) inferRunnerType(labels []string) models.RunnerType {
-	return h.config.RunnerTypeConfig.InferRunnerType(labels)
 }
 
 func (h *WorkflowJobHandler) ExtractEventTimestamp(eventData []byte) (time.Time, error) {

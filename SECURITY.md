@@ -18,12 +18,6 @@ LOG_LEVEL=info
 # Data Management Configuration
 DATA_RETENTION_DAYS=30
 CLEANUP_INTERVAL_HOURS=24
-
-# Monitoring Configuration
-PROMETHEUS_URL=http://localhost:9090
-
-# Runner Configuration
-RUNNER_TYPE_CONFIG_PATH=config/runner_types.json
 ```
 
 ## Production Deployment Requirements

@@ -12,13 +12,12 @@ func TestAddOrUpdateJob_NewJob(t *testing.T) {
 	mockDB := &MockDatabase{}
 
 	job := models.WorkflowJob{
-		ID:         123,
-		Name:       "test-job",
-		Status:     models.JobStatusQueued,
-		RunnerType: models.RunnerTypeGitHubHosted,
-		Labels:     []string{"ubuntu-latest"},
-		CreatedAt:  time.Now(),
-		RunID:      456,
+		ID:        123,
+		Name:      "test-job",
+		Status:    models.JobStatusQueued,
+		Labels:    []string{"ubuntu-latest"},
+		CreatedAt: time.Now(),
+		RunID:     456,
 	}
 
 	eventTime := time.Now()
@@ -37,13 +36,12 @@ func TestAddOrUpdateJob_RejectOlderEvent(t *testing.T) {
 	mockDB := &MockDatabase{}
 
 	job := models.WorkflowJob{
-		ID:         123,
-		Name:       "test-job",
-		Status:     models.JobStatusQueued, // Trying to set to queued
-		RunnerType: models.RunnerTypeGitHubHosted,
-		Labels:     []string{"ubuntu-latest"},
-		CreatedAt:  time.Now(),
-		RunID:      456,
+		ID:        123,
+		Name:      "test-job",
+		Status:    models.JobStatusQueued, // Trying to set to queued
+		Labels:    []string{"ubuntu-latest"},
+		CreatedAt: time.Now(),
+		RunID:     456,
 	}
 
 	// Event timestamp is older than when job was completed

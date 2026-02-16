@@ -11,12 +11,6 @@ type MockDatabase struct {
 	mock.Mock
 }
 
-// GetJobsByLabel implements DatabaseInterface.
-func (m *MockDatabase) GetJobsByLabel(page int, limit int) ([]models.LabelMetrics, int, error) {
-	args := m.Called(page, limit)
-	return args.Get(0).([]models.LabelMetrics), args.Int(1), args.Error(2)
-}
-
 func (m *MockDatabase) GetWorkflowRunsPaginated(page int, limit int) ([]models.WorkflowRun, int, error) {
 	args := m.Called(page, limit)
 	return args.Get(0).([]models.WorkflowRun), args.Int(1), args.Error(2)
@@ -72,9 +66,9 @@ func (m *MockDatabase) MarkEventFailed(deliveryID string) error {
 	return args.Error(0)
 }
 
-func (m *MockDatabase) GetCurrentJobCounts() (map[string]map[string]int, error) {
+func (m *MockDatabase) GetCurrentJobCounts() (int, int, error) {
 	args := m.Called()
-	return args.Get(0).(map[string]map[string]int), args.Error(1)
+	return args.Int(0), args.Int(1), args.Error(2)
 }
 
 func (m *MockDatabase) InsertMetricsSnapshot(running, queued int) error {

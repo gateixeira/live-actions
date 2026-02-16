@@ -4,15 +4,6 @@ import (
 	"time"
 )
 
-// RunnerType represents the type of runner (GitHub-hosted or self-hosted)
-type RunnerType string
-
-const (
-	RunnerTypeGitHubHosted RunnerType = "github-hosted"
-	RunnerTypeSelfHosted   RunnerType = "self-hosted"
-	RunnerTypeUnknown      RunnerType = "unknown"
-)
-
 // JobStatus represents the status of a workflow job
 type JobStatus string
 
@@ -38,16 +29,15 @@ type WorkflowRunEvent struct {
 }
 
 type WorkflowJob struct {
-	ID          int64      `json:"id" binding:"required"`
-	Name        string     `json:"name" binding:"required"`
-	Status      JobStatus  `json:"status" binding:"required"`
-	Labels      []string   `json:"labels" binding:"required"`
-	Conclusion  string     `json:"conclusion"`
-	CreatedAt   time.Time  `json:"created_at" binding:"required"`
-	StartedAt   time.Time  `json:"started_at"`
-	CompletedAt time.Time  `json:"completed_at"`
-	RunID       int64      `json:"run_id" binding:"required"`
-	RunnerType  RunnerType `json:"runner_type"`
+	ID          int64     `json:"id" binding:"required"`
+	Name        string    `json:"name" binding:"required"`
+	Status      JobStatus `json:"status" binding:"required"`
+	Labels      []string  `json:"labels" binding:"required"`
+	Conclusion  string    `json:"conclusion"`
+	CreatedAt   time.Time `json:"created_at" binding:"required"`
+	StartedAt   time.Time `json:"started_at"`
+	CompletedAt time.Time `json:"completed_at"`
+	RunID       int64     `json:"run_id" binding:"required"`
 }
 
 type WorkflowRun struct {
@@ -68,21 +58,10 @@ type Repository struct {
 	Url  string `json:"url" binding:"required"`
 }
 
-type LabelMetrics struct {
-	Labels         []string   `json:"labels"`
-	RunnerType     RunnerType `json:"runner_type"`
-	QueuedCount    int        `json:"queued_count"`
-	RunningCount   int        `json:"running_count"`
-	CompletedCount int        `json:"completed_count"`
-	CancelledCount int        `json:"cancelled_count"`
-	TotalCount     int        `json:"total_count"`
-}
-
 type MetricsUpdateEvent struct {
-	RunningJobs  int            `json:"running_jobs"`
-	QueuedJobs   int            `json:"queued_jobs"`
-	Timestamp    string         `json:"timestamp"`
-	LabelMetrics []LabelMetrics `json:"label_metrics,omitempty"`
+	RunningJobs int    `json:"running_jobs"`
+	QueuedJobs  int    `json:"queued_jobs"`
+	Timestamp   string `json:"timestamp"`
 }
 
 type WorkflowUpdateEvent struct {
@@ -90,7 +69,6 @@ type WorkflowUpdateEvent struct {
 	Action      string      `json:"action"`
 	ID          int64       `json:"id"`
 	Status      string      `json:"status"`
-	RunnerType  string      `json:"runner_type,omitempty"`
 	Timestamp   string      `json:"timestamp"`
 	WorkflowJob WorkflowJob `json:"workflow_job,omitempty"`
 	WorkflowRun WorkflowRun `json:"workflow_run,omitempty"`

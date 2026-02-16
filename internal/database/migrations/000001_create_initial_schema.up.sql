@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS workflow_jobs (
     name TEXT NOT NULL,
     run_id INTEGER NOT NULL,
     status TEXT NOT NULL,
-    runner_type TEXT NOT NULL,
     labels TEXT,
     conclusion TEXT,
     created_at TEXT NOT NULL,
@@ -38,11 +37,16 @@ CREATE TABLE IF NOT EXISTS webhook_events (
     status_priority INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS metrics_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    running_jobs INTEGER NOT NULL DEFAULT 0,
+    queued_jobs INTEGER NOT NULL DEFAULT 0
+);
+
 -- Workflow Jobs
 CREATE INDEX IF NOT EXISTS idx_workflow_jobs_workflow_run_id ON workflow_jobs (run_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_jobs_created_at ON workflow_jobs (created_at);
-CREATE INDEX IF NOT EXISTS idx_workflow_jobs_status_runner_type ON workflow_jobs (status, runner_type);
-CREATE INDEX IF NOT EXISTS idx_workflow_jobs_labels_runner_type ON workflow_jobs (runner_type, labels);
 
 -- Workflow Runs
 CREATE INDEX IF NOT EXISTS idx_workflow_runs_created_at ON workflow_runs (created_at);
@@ -51,3 +55,6 @@ CREATE INDEX IF NOT EXISTS idx_workflow_runs_created_at ON workflow_runs (create
 CREATE INDEX IF NOT EXISTS idx_webhook_events_status_ordering ON webhook_events (status, github_timestamp, ordering_key, status_priority);
 CREATE INDEX IF NOT EXISTS idx_webhook_events_status_received_at ON webhook_events (status, received_at);
 CREATE INDEX IF NOT EXISTS idx_webhook_events_processed_at ON webhook_events (processed_at);
+
+-- Metrics Snapshots
+CREATE INDEX IF NOT EXISTS idx_metrics_snapshots_timestamp ON metrics_snapshots (timestamp);

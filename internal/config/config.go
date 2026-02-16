@@ -1,8 +1,6 @@
 package config
 
 import (
-	"embed"
-	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -18,17 +16,14 @@ type Vars struct {
 	Labels               []string
 	DataRetentionDays    int
 	CleanupIntervalHours int
-	RunnerTypeConfigPath string
 }
 
 type Config struct {
-	Vars             Vars
-	RunnerTypeConfig *RunnerTypeConfig
+	Vars Vars
 }
 
 // NewConfig creates and initializes a new application config.
-// configFS provides the embedded config/ directory.
-func NewConfig(configFS ...embed.FS) *Config {
+func NewConfig() *Config {
 	vars := Vars{
 		WebhookSecret:        os.Getenv("WEBHOOK_SECRET"),
 		Port:                 getEnvOrDefault("PORT", "8080"),
@@ -38,24 +33,9 @@ func NewConfig(configFS ...embed.FS) *Config {
 		Environment:          getEnvOrDefault("ENVIRONMENT", "development"),
 		DataRetentionDays:    getEnvOrDefaultInt("DATA_RETENTION_DAYS", 30),    // Default 1 month
 		CleanupIntervalHours: getEnvOrDefaultInt("CLEANUP_INTERVAL_HOURS", 24), // Daily cleanup
-		RunnerTypeConfigPath: getEnvOrDefault("RUNNER_TYPE_CONFIG_PATH", "config/runner_types.json"),
 	}
 
 	config := &Config{Vars: vars}
-
-	var runnerTypeConfig *RunnerTypeConfig
-	var err error
-
-	// Try embedded FS first, then fall back to disk
-	if len(configFS) > 0 {
-		runnerTypeConfig, err = LoadRunnerTypeConfigFromFS(configFS[0], vars.RunnerTypeConfigPath)
-	} else {
-		runnerTypeConfig, err = LoadRunnerTypeConfig(vars.RunnerTypeConfigPath)
-	}
-	if err != nil {
-		panic(fmt.Errorf("failed to load runner type config: %w", err))
-	}
-	config.RunnerTypeConfig = runnerTypeConfig
 
 	// Validate critical configuration in production
 	if config.IsProduction() {

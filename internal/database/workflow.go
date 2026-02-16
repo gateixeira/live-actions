@@ -53,12 +53,11 @@ func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimesta
 	}
 
 	_, err = tx.Exec(
-		`INSERT INTO workflow_jobs (id, name, status, runner_type, labels, conclusion, created_at, started_at, completed_at, updated_at, run_id) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+		`INSERT INTO workflow_jobs (id, name, status, labels, conclusion, created_at, started_at, completed_at, updated_at, run_id) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
 		ON CONFLICT (id) DO UPDATE SET
 			name = excluded.name,
 			status = excluded.status,
-			runner_type = excluded.runner_type,
 			labels = excluded.labels,
 			conclusion = excluded.conclusion,
 			created_at = excluded.created_at,
@@ -66,7 +65,7 @@ func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimesta
 			completed_at = excluded.completed_at,
 			updated_at = datetime('now'),
 			run_id = excluded.run_id`,
-		workflowJob.ID, string(workflowJob.Name), string(workflowJob.Status), string(workflowJob.RunnerType), labelsToJSON(workflowJob.Labels),
+		workflowJob.ID, string(workflowJob.Name), string(workflowJob.Status), labelsToJSON(workflowJob.Labels),
 		string(workflowJob.Conclusion), workflowJob.CreatedAt.Format(time.RFC3339), formatNullableTime(workflowJob.StartedAt), formatNullableTime(workflowJob.CompletedAt), workflowJob.RunID,
 	)
 
@@ -165,64 +164,8 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(page int, limit int) ([]models.Wor
 	return runs, totalCount, nil
 }
 
-func (db *DBWrapper) GetJobsByLabel(page int, limit int) ([]models.LabelMetrics, int, error) {
-	offset := (page - 1) * limit
-
-	var total int
-	err := DB.QueryRow("SELECT COUNT(*) FROM (SELECT DISTINCT labels, runner_type FROM workflow_jobs)").Scan(&total)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return []models.LabelMetrics{}, 0, nil
-		}
-		return nil, 0, err
-	}
-
-	query := `
-        SELECT 
-            labels,
-			runner_type,
-            COUNT(CASE WHEN status = 'queued' THEN 1 END) as queued_count,
-            COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as running_count,
-            COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count,
-            COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_count,
-            COUNT(*) as total_count
-        FROM workflow_jobs 
-        GROUP BY labels, runner_type
-		ORDER BY total_count DESC
-		LIMIT ? OFFSET ?
-    `
-
-	rows, err := DB.Query(query, limit, offset)
-	if err != nil {
-		return nil, total, err
-	}
-	defer rows.Close()
-
-	var labelCounts []models.LabelMetrics
-	for rows.Next() {
-		var labelsJSON string
-		var runnerType string
-		var queuedCount, runningCount, completedCount, cancelledCount, totalCount int
-		if err := rows.Scan(&labelsJSON, &runnerType, &queuedCount, &runningCount, &completedCount, &cancelledCount, &totalCount); err != nil {
-			return nil, total, err
-		}
-
-		labelCounts = append(labelCounts, models.LabelMetrics{
-			Labels:         labelsFromJSON(labelsJSON),
-			RunnerType:     models.RunnerType(runnerType),
-			QueuedCount:    queuedCount,
-			RunningCount:   runningCount,
-			CompletedCount: completedCount,
-			CancelledCount: cancelledCount,
-			TotalCount:     totalCount,
-		})
-	}
-
-	return labelCounts, total, nil
-}
-
 func (db *DBWrapper) GetWorkflowJobsByRunID(runID int64) ([]models.WorkflowJob, error) {
-	rows, err := DB.Query("SELECT id, name, run_id, status, runner_type, labels, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
+	rows, err := DB.Query("SELECT id, name, run_id, status, labels, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +177,7 @@ func (db *DBWrapper) GetWorkflowJobsByRunID(runID int64) ([]models.WorkflowJob, 
 		var labelsJSON string
 		var createdAt string
 		var startedAt, completedAt sql.NullString
-		if err := rows.Scan(&job.ID, &job.Name, &job.RunID, &job.Status, &job.RunnerType, &labelsJSON, &job.Conclusion, &createdAt, &startedAt, &completedAt); err != nil {
+		if err := rows.Scan(&job.ID, &job.Name, &job.RunID, &job.Status, &labelsJSON, &job.Conclusion, &createdAt, &startedAt, &completedAt); err != nil {
 			return nil, err
 		}
 		job.Labels = labelsFromJSON(labelsJSON)
@@ -255,11 +198,11 @@ func (db *DBWrapper) GetWorkflowJobByID(jobID int64) (models.WorkflowJob, error)
 	var startedAt, completedAt sql.NullString
 
 	err := DB.QueryRow(`
-		SELECT id, name, run_id, status, runner_type, labels, conclusion, 
+		SELECT id, name, run_id, status, labels, conclusion, 
 			   created_at, started_at, completed_at 
 		FROM workflow_jobs 
 		WHERE id = ?`, jobID).Scan(
-		&job.ID, &job.Name, &job.RunID, &job.Status, &job.RunnerType,
+		&job.ID, &job.Name, &job.RunID, &job.Status,
 		&labelsJSON, &job.Conclusion, &createdAt,
 		&startedAt, &completedAt)
 
@@ -330,40 +273,18 @@ func (db *DBWrapper) CleanupOldData(retentionPeriod time.Duration) (int64, int64
 	return deletedRuns, deletedJobs, deletedEvents, nil
 }
 
-func (db *DBWrapper) GetCurrentJobCounts() (map[string]map[string]int, error) {
-	query := `
-        SELECT 
-            runner_type,
-            SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) as queued_count,
-            SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_count
-        FROM workflow_jobs 
-        GROUP BY runner_type
-        ORDER BY runner_type
-    `
-
-	rows, err := DB.Query(query)
+func (db *DBWrapper) GetCurrentJobCounts() (int, int, error) {
+	var running, queued int
+	err := DB.QueryRow(`
+		SELECT 
+			COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0)
+		FROM workflow_jobs
+	`).Scan(&running, &queued)
 	if err != nil {
-		return nil, err
+		return 0, 0, err
 	}
-	defer rows.Close()
-
-	result := make(map[string]map[string]int)
-
-	for rows.Next() {
-		var runnerType string
-		var queuedCount, inProgressCount int
-
-		if err := rows.Scan(&runnerType, &queuedCount, &inProgressCount); err != nil {
-			return nil, err
-		}
-
-		result[runnerType] = map[string]int{
-			"queued":      queuedCount,
-			"in_progress": inProgressCount,
-		}
-	}
-
-	return result, nil
+	return running, queued, nil
 }
 
 // formatNullableTime formats a time.Time as RFC3339 string, returning nil for zero times

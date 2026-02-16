@@ -11,9 +11,8 @@ type DatabaseInterface interface {
 	// Workflow Jobs
 	AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimestamp time.Time) (bool, error)
 	GetWorkflowJobByID(jobID int64) (models.WorkflowJob, error)
-	GetJobsByLabel(page int, limit int) ([]models.LabelMetrics, int, error)
 	GetWorkflowJobsByRunID(runID int64) ([]models.WorkflowJob, error)
-	GetCurrentJobCounts() (map[string]map[string]int, error)
+	GetCurrentJobCounts() (int, int, error)
 
 	// Workflow Runs
 	AddOrUpdateRun(workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error)

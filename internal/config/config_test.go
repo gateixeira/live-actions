@@ -2,18 +2,12 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 )
 
 func TestNewConfig(t *testing.T) {
 	// Clear environment variables before test
 	os.Clearenv()
-
-	// Set a test config path that exists relative to the project root
-	// Since tests run from the package directory, we need to go up to find the config
-	testConfigPath := filepath.Join("..", "..", "config", "runner_types.json")
-	os.Setenv("RUNNER_TYPE_CONFIG_PATH", testConfigPath)
 
 	t.Run("with default values", func(t *testing.T) {
 		config := NewConfig()
@@ -30,15 +24,11 @@ func TestNewConfig(t *testing.T) {
 	})
 
 	t.Run("with custom environment values", func(t *testing.T) {
-		// Set a test config path that exists relative to the project root
-		testConfigPath := filepath.Join("..", "..", "config", "runner_types.json")
-
 		// Set custom environment variables
 		os.Setenv("WEBHOOK_SECRET", "test-secret")
 		os.Setenv("PORT", "3000")
-		os.Setenv("DATABASE_URL", "postgresql://test-user:test-password@test-host:5433/test-db?sslmode=require")
+		os.Setenv("DATABASE_URL", "test.db")
 		os.Setenv("LOG_LEVEL", "debug")
-		os.Setenv("RUNNER_TYPE_CONFIG_PATH", testConfigPath)
 
 		config := NewConfig()
 
@@ -48,8 +38,8 @@ func TestNewConfig(t *testing.T) {
 		if config.Vars.Port != "3000" {
 			t.Errorf("Expected Port to be 3000, got %s", config.Vars.Port)
 		}
-		if config.Vars.DatabaseURL != "postgresql://test-user:test-password@test-host:5433/test-db?sslmode=require" {
-			t.Errorf("Expected DatabaseURL to be postgresql://test-user:test-password@test-host:5433/test-db?sslmode=require, got %s", config.Vars.DatabaseURL)
+		if config.Vars.DatabaseURL != "test.db" {
+			t.Errorf("Expected DatabaseURL to be test.db, got %s", config.Vars.DatabaseURL)
 		}
 		if config.Vars.LogLevel != "debug" {
 			t.Errorf("Expected LogLevel to be debug, got %s", config.Vars.LogLevel)
@@ -61,10 +51,6 @@ func TestGetDSN(t *testing.T) {
 	os.Clearenv()
 
 	t.Run("with default values", func(t *testing.T) {
-		// Set a test config path that exists relative to the project root
-		testConfigPath := filepath.Join("..", "..", "config", "runner_types.json")
-		os.Setenv("RUNNER_TYPE_CONFIG_PATH", testConfigPath)
-
 		config := NewConfig()
 		expected := "./data/live-actions.db"
 		if dsn := config.GetDSN(); dsn != expected {
@@ -73,14 +59,10 @@ func TestGetDSN(t *testing.T) {
 	})
 
 	t.Run("with custom values", func(t *testing.T) {
-		// Set a test config path that exists relative to the project root
-		testConfigPath := filepath.Join("..", "..", "config", "runner_types.json")
-
-		os.Setenv("DATABASE_URL", "postgresql://test-user:test-password@test-host:5433/test-db?sslmode=require")
-		os.Setenv("RUNNER_TYPE_CONFIG_PATH", testConfigPath)
+		os.Setenv("DATABASE_URL", "custom.db")
 
 		config := NewConfig()
-		expected := "postgresql://test-user:test-password@test-host:5433/test-db?sslmode=require"
+		expected := "custom.db"
 		if dsn := config.GetDSN(); dsn != expected {
 			t.Errorf("Expected DSN %s, got %s", expected, dsn)
 		}

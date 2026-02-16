@@ -154,37 +154,6 @@ func (h *APIHandler) GetWorkflowJobsByRunID() gin.HandlerFunc {
 	}
 }
 
-// GetLabelMetrics retrieves metrics broken down by label
-func (h *APIHandler) GetLabelMetrics() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		page, limit := GetPaginationParams(c)
-
-		jobs, totalCount, err := h.db.GetJobsByLabel(page, limit)
-		if err != nil {
-			logger.Logger.Error("Error retrieving jobs by label", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve jobs metrics"})
-			return
-		}
-
-		// Calculate pagination metadata
-		totalPages := (totalCount + limit - 1) / limit
-		hasNext := page < totalPages
-		hasPrev := page > 1
-
-		c.JSON(http.StatusOK, gin.H{
-			"label_metrics": jobs,
-			"pagination": gin.H{
-				"current_page": page,
-				"total_pages":  totalPages,
-				"total_count":  totalCount,
-				"page_size":    limit,
-				"has_next":     hasNext,
-				"has_previous": hasPrev,
-			},
-		})
-	}
-}
-
 // GetCurrentMetrics returns current metrics and time-series data from the database.
 func (h *APIHandler) GetCurrentMetrics() gin.HandlerFunc {
 	return func(c *gin.Context) {

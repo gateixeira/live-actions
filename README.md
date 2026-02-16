@@ -79,7 +79,6 @@ docker run -p 8080:8080 \
 | `TLS_ENABLED` | `false` | Enable HTTPS cookie flags |
 | `DATA_RETENTION_DAYS` | `30` | How long to keep historical data |
 | `CLEANUP_INTERVAL_HOURS` | `24` | How often to run data cleanup |
-| `RUNNER_TYPE_CONFIG_PATH` | `config/runner_types.json` | Runner type detection config (embedded by default) |
 
 ## GitHub Webhook Configuration
 
@@ -129,7 +128,6 @@ Live Actions is a single Go binary with all assets embedded:
 
 - **Database**: SQLite (stored at `DATABASE_URL`, default `./data/live-actions.db`)
 - **Frontend**: React + Primer (embedded via `go:embed`)
-- **Config**: Runner type detection config (embedded via `go:embed`)
 - **Metrics**: `/metrics` endpoint for external Prometheus scraping; dashboard charts powered by internal SQLite snapshots
 
 No external services required.
@@ -143,17 +141,6 @@ make test     # Run tests
 make lint     # Run linter
 make clean    # Clean build files
 ```
-
-### Runner Type Detection
-
-Runner type detection is controlled by `config/runner_types.json`:
-
-| Job `runs-on` Labels | Classification | Reason |
-|---------------------|----------------|---------|
-| `["ubuntu-latest"]` | GitHub-hosted | Matches `github_hosted_labels` |
-| `["self-hosted", "linux"]` | Self-hosted | Contains explicit `self-hosted` label |
-| `["custom", "gpu"]` | Self-hosted | No matches, uses default |
-| `["ubuntu-latest", "self-hosted"]` | Self-hosted | Self-hosted takes priority |
 
 ## 🔥 Live Actions vs GitHub's Built-in Metrics
 
@@ -170,4 +157,3 @@ While GitHub offers [Actions Usage Metrics](https://docs.github.com/en/enterpris
 - **Metrics Reconciliation Delays**: Slight delays possible due to webhook processing.
 - **GitHub Webhook Reliability**: GitHub may occasionally fail to send events for completed workflow runs.
 - **Event Ordering**: GitHub does not guarantee webhook event order; reordering is handled on a best-effort basis.
-- **Runner Type Detection**: Best-effort classification based on job labels via `runner_types.json`.

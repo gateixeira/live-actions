@@ -66,12 +66,9 @@ function JobRow({ job }: { job: WorkflowJob }) {
         <StatusBadge status={job.status} conclusion={job.conclusion} />
       </Box>
       <Box as="td" sx={{ p: 2, fontSize: 0 }}>
-        {job.labels?.join(', ') || '-'}
-      </Box>
-      <Box as="td" sx={{ p: 2, fontSize: 0 }}>
-        <Label variant={job.runner_type === 'self-hosted' ? 'accent' : 'default'}>
-          {job.runner_type}
-        </Label>
+        {job.labels?.map((label) => (
+          <Label key={label} sx={{ mr: 1 }}>{label}</Label>
+        )) || '-'}
       </Box>
       <Box as="td" sx={{ p: 2, fontSize: 0 }}>
         {duration(job.started_at, job.completed_at, job.status)}
@@ -155,9 +152,6 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
                     </Box>
                     <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>
                       Status
-                    </Box>
-                    <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>
-                      Labels
                     </Box>
                     <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>
                       Runner

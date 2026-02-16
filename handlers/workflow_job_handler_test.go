@@ -22,19 +22,9 @@ func setupWorkflowJobTest() (*database.MockDatabase, *config.Config) {
 	// Initialize SSE handler to prevent panics
 	InitSSEHandler()
 
-	// Create test config with runner type config
-	runnerTypeConfig := &config.RunnerTypeConfig{
-		SelfHostedLabels:   []string{"self-hosted", "self-hosted-large"},
-		GitHubHostedLabels: []string{"ubuntu-latest", "ubuntu-22.04", "ubuntu-20.04", "windows-latest", "macos-latest"},
-		DefaultRunnerType:  models.RunnerTypeGitHubHosted,
-	}
-
 	testConfig := &config.Config{
-		Vars: config.Vars{
-		},
-		RunnerTypeConfig: runnerTypeConfig,
+		Vars: config.Vars{},
 	}
-
 
 	return &database.MockDatabase{}, testConfig
 }
@@ -45,7 +35,6 @@ func TestNewWorkflowJobHandler(t *testing.T) {
 
 	assert.NotNil(t, handler, "NewWorkflowJobHandler should return a non-nil handler")
 	assert.Equal(t, mockDB, handler.db, "Handler should store the database interface")
-	// Note: Cannot test mutex directly due to Go's lock copying restrictions
 }
 
 func TestWorkflowJobHandler_GetEventType(t *testing.T) {
@@ -54,50 +43,6 @@ func TestWorkflowJobHandler_GetEventType(t *testing.T) {
 
 	eventType := handler.GetEventType()
 	assert.Equal(t, "workflow_job", eventType, "GetEventType should return 'workflow_job'")
-}
-
-func TestWorkflowJobHandler_InferRunnerType(t *testing.T) {
-	mockDB, testConfig := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB)
-
-	testCases := []struct {
-		name     string
-		labels   []string
-		expected models.RunnerType
-	}{
-		{
-			name:     "self-hosted label",
-			labels:   []string{"ubuntu-latest", "self-hosted"},
-			expected: models.RunnerTypeSelfHosted,
-		},
-		{
-			name:     "self-hosted-large label",
-			labels:   []string{"self-hosted-large", "linux"},
-			expected: models.RunnerTypeSelfHosted,
-		},
-		{
-			name:     "github-hosted labels",
-			labels:   []string{"ubuntu-latest", "linux"},
-			expected: models.RunnerTypeGitHubHosted,
-		},
-		{
-			name:     "empty labels",
-			labels:   []string{},
-			expected: models.RunnerTypeGitHubHosted,
-		},
-		{
-			name:     "only ubuntu labels",
-			labels:   []string{"ubuntu-latest", "ubuntu-20.04"},
-			expected: models.RunnerTypeGitHubHosted,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := handler.inferRunnerType(tc.labels)
-			assert.Equal(t, tc.expected, result, "InferRunnerType should return correct runner type for %v", tc.labels)
-		})
-	}
 }
 
 func TestWorkflowJobHandler_HandleEvent_Success(t *testing.T) {
@@ -141,33 +86,11 @@ func TestWorkflowJobHandler_HandleEvent_Success(t *testing.T) {
 		return job.ID == 12345 &&
 			job.Name == "Test Job" &&
 			job.Status == models.JobStatus("in_progress") &&
-			job.RunnerType == models.RunnerTypeSelfHosted &&
 			job.RunID == 67890
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
-		"self-hosted": {
-			"in_progress": 1,
-			"queued":  0,
-		},
-		"github-hosted": {
-			"in_progress": 0,
-			"queued":  2,
-		},
-	}, nil)
-
-	mockDB.On("GetJobsByLabel", 1, 10).Return([]models.LabelMetrics{
-		{
-			Labels:         []string{"ubuntu-latest"},
-			RunnerType:     models.RunnerTypeSelfHosted,
-			QueuedCount:    1,
-			RunningCount:   1,
-			CompletedCount: 0,
-			CancelledCount: 0,
-			TotalCount:     2,
-		},
-	}, 1, nil)
+	mockDB.On("GetCurrentJobCounts").Return(1, 2, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -229,19 +152,11 @@ func TestWorkflowJobHandler_HandleEvent_DatabaseGetJobError(t *testing.T) {
 	// Should still proceed with AddOrUpdateJob
 	mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
 		return job.ID == 12345 &&
-			job.Status == models.JobStatus("queued") &&
-			job.RunnerType == models.RunnerTypeGitHubHosted // Inferred from labels
+			job.Status == models.JobStatus("queued")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
-		"github-hosted": {
-			"in_progress": 0,
-			"queued":  1,
-		},
-	}, nil)
-
-	mockDB.On("GetJobsByLabel", 1, 10).Return([]models.LabelMetrics{}, 0, nil)
+	mockDB.On("GetCurrentJobCounts").Return(0, 1, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -299,39 +214,34 @@ func TestWorkflowJobHandler_HandleEvent_DatabaseAddJobError(t *testing.T) {
 
 func TestWorkflowJobHandler_HandleEvent_DifferentActions(t *testing.T) {
 	testCases := []struct {
-		name               string
-		action             string
-		expectedStatus     models.JobStatus
-		labels             []string
-		expectedRunnerType models.RunnerType
+		name           string
+		action         string
+		expectedStatus models.JobStatus
+		labels         []string
 	}{
 		{
-			name:               "queued action",
-			action:             "queued",
-			expectedStatus:     models.JobStatus("queued"),
-			labels:             []string{"ubuntu-latest"},
-			expectedRunnerType: models.RunnerTypeGitHubHosted,
+			name:           "queued action",
+			action:         "queued",
+			expectedStatus: models.JobStatus("queued"),
+			labels:         []string{"ubuntu-latest"},
 		},
 		{
-			name:               "in_progress action",
-			action:             "in_progress",
-			expectedStatus:     models.JobStatus("in_progress"),
-			labels:             []string{"self-hosted", "linux"},
-			expectedRunnerType: models.RunnerTypeSelfHosted,
+			name:           "in_progress action",
+			action:         "in_progress",
+			expectedStatus: models.JobStatus("in_progress"),
+			labels:         []string{"self-hosted", "linux"},
 		},
 		{
-			name:               "completed action",
-			action:             "completed",
-			expectedStatus:     models.JobStatus("completed"),
-			labels:             []string{"windows-latest"},
-			expectedRunnerType: models.RunnerTypeGitHubHosted,
+			name:           "completed action",
+			action:         "completed",
+			expectedStatus: models.JobStatus("completed"),
+			labels:         []string{"windows-latest"},
 		},
 		{
-			name:               "cancelled action",
-			action:             "cancelled",
-			expectedStatus:     models.JobStatus("cancelled"),
-			labels:             []string{"self-hosted-large"},
-			expectedRunnerType: models.RunnerTypeSelfHosted,
+			name:           "cancelled action",
+			action:         "cancelled",
+			expectedStatus: models.JobStatus("cancelled"),
+			labels:         []string{"self-hosted-large"},
 		},
 	}
 
@@ -371,19 +281,11 @@ func TestWorkflowJobHandler_HandleEvent_DifferentActions(t *testing.T) {
 
 			mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
 				return job.ID == 12345 &&
-					job.Status == tc.expectedStatus &&
-					job.RunnerType == tc.expectedRunnerType
+					job.Status == tc.expectedStatus
 			}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 			// Set up mock expectations for metrics update
-			mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
-				string(tc.expectedRunnerType): {
-					"in_progress": 1,
-					"queued":  0,
-				},
-			}, nil)
-
-			mockDB.On("GetJobsByLabel", 1, 10).Return([]models.LabelMetrics{}, 0, nil)
+			mockDB.On("GetCurrentJobCounts").Return(1, 0, nil)
 
 			// Execute the handler
 			err = handler.HandleEvent(eventData, sequence)
@@ -465,19 +367,11 @@ func TestWorkflowJobHandler_HandleEvent_StatusTransitions(t *testing.T) {
 
 			mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
 				return job.ID == 12345 &&
-					job.Status == tc.expectedStatus &&
-					job.RunnerType == models.RunnerTypeGitHubHosted
+					job.Status == tc.expectedStatus
 			}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 			// Set up mock expectations for metrics update
-			mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
-				"github-hosted": {
-					"in_progress": 1,
-					"queued":  0,
-				},
-			}, nil)
-
-			mockDB.On("GetJobsByLabel", 1, 10).Return([]models.LabelMetrics{}, 0, nil)
+			mockDB.On("GetCurrentJobCounts").Return(1, 0, nil)
 
 			// Execute the handler
 			err = handler.HandleEvent(eventData, sequence)
@@ -531,19 +425,11 @@ func TestWorkflowJobHandler_HandleEvent_WithStartedAtTime(t *testing.T) {
 	mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
 		capturedJob = job
 		return job.ID == 12345 &&
-			job.Status == models.JobStatus("in_progress") &&
-			job.RunnerType == models.RunnerTypeGitHubHosted
+			job.Status == models.JobStatus("in_progress")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
-		"github-hosted": {
-			"in_progress": 1,
-			"queued":  0,
-		},
-	}, nil)
-
-	mockDB.On("GetJobsByLabel", 1, 10).Return([]models.LabelMetrics{}, 0, nil)
+	mockDB.On("GetCurrentJobCounts").Return(1, 0, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -555,7 +441,7 @@ func TestWorkflowJobHandler_HandleEvent_WithStartedAtTime(t *testing.T) {
 	mockDB.AssertExpectations(t)
 }
 
-func TestWorkflowJobHandler_HandleEvent_GetJobsByLabelError(t *testing.T) {
+func TestWorkflowJobHandler_HandleEvent_GetCurrentJobCountsError(t *testing.T) {
 	mockDB, testConfig := setupWorkflowJobTest()
 	handler := NewWorkflowJobHandler(testConfig, mockDB)
 
@@ -593,20 +479,13 @@ func TestWorkflowJobHandler_HandleEvent_GetJobsByLabelError(t *testing.T) {
 	mockDB.On("AddOrUpdateJob", mock.AnythingOfType("models.WorkflowJob"), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
-		"github-hosted": {
-			"in_progress": 0,
-			"queued":  0,
-		},
-	}, nil)
-
-	mockDB.On("GetJobsByLabel", 1, 10).Return([]models.LabelMetrics{}, 0, errors.New("database error"))
+	mockDB.On("GetCurrentJobCounts").Return(0, 0, errors.New("database error"))
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
 
-	// Should not return error when GetJobsByLabel fails (it's in a goroutine and doesn't propagate)
-	assert.NoError(t, err, "HandleEvent should not return an error when GetJobsByLabel fails in goroutine")
+	// Should not return error when GetCurrentJobCounts fails
+	assert.NoError(t, err, "HandleEvent should not return an error when metrics update fails")
 	mockDB.AssertExpectations(t)
 }
 
@@ -660,19 +539,11 @@ func TestWorkflowJobHandler_HandleEvent_MinimalRequiredFields(t *testing.T) {
 
 	mockDB.On("AddOrUpdateJob", mock.MatchedBy(func(job models.WorkflowJob) bool {
 		return job.ID == 1 &&
-			job.Status == models.JobStatus("queued") &&
-			job.RunnerType == models.RunnerTypeGitHubHosted
+			job.Status == models.JobStatus("queued")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
 	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts").Return(map[string]map[string]int{
-		"github-hosted": {
-			"in_progress": 0,
-			"queued":  1,
-		},
-	}, nil)
-
-	mockDB.On("GetJobsByLabel", 1, 10).Return([]models.LabelMetrics{}, 0, nil)
+	mockDB.On("GetCurrentJobCounts").Return(0, 1, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)

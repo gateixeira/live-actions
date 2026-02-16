@@ -1,5 +1,3 @@
-export type RunnerType = 'github-hosted' | 'self-hosted' | 'unknown'
-
 export type JobStatus =
   | 'queued'
   | 'in_progress'
@@ -31,7 +29,6 @@ export interface WorkflowJob {
   started_at: string
   completed_at: string
   run_id: number
-  runner_type: RunnerType
 }
 
 export interface Pagination {
@@ -52,14 +49,20 @@ export interface WorkflowJobsResponse {
   workflow_jobs: WorkflowJob[]
 }
 
-export interface LabelMetrics {
-  labels: string[]
-  runner_type: RunnerType
-  queued_count: number
-  running_count: number
-  completed_count: number
-  cancelled_count: number
-  total_count: number
+export interface MetricsUpdateEvent {
+  running_jobs: number
+  queued_jobs: number
+  timestamp: string
+}
+
+export interface WorkflowUpdateEvent {
+  type: 'run' | 'job'
+  action: string
+  id: number
+  status: string
+  timestamp: string
+  workflow_job?: WorkflowJob
+  workflow_run?: WorkflowRun
 }
 
 export interface TimeSeriesEntry {
@@ -81,24 +84,6 @@ export interface MetricsResponse {
     running_jobs: TimeSeriesData
     queued_jobs: TimeSeriesData
   }
-}
-
-export interface MetricsUpdateEvent {
-  running_jobs: number
-  queued_jobs: number
-  timestamp: string
-  label_metrics?: LabelMetrics[]
-}
-
-export interface WorkflowUpdateEvent {
-  type: 'run' | 'job'
-  action: string
-  id: number
-  status: string
-  runner_type?: string
-  timestamp: string
-  workflow_job?: WorkflowJob
-  workflow_run?: WorkflowRun
 }
 
 export type Period = 'hour' | 'day' | 'week' | 'month'

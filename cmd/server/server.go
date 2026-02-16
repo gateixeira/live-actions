@@ -20,8 +20,8 @@ import (
 )
 
 // SetupAndRun configures the router and starts the server
-func SetupAndRun(staticFS, configFS embed.FS) {
-	cfg := config.NewConfig(configFS)
+func SetupAndRun(staticFS embed.FS) {
+	cfg := config.NewConfig()
 
 	logger.InitLogger(cfg.Vars.LogLevel)
 	defer logger.SyncLogger()
@@ -82,7 +82,6 @@ func SetupAndRun(staticFS, configFS embed.FS) {
 	r.POST("/webhook", handlers.ValidateGitHubWebhook(cfg), webhookHandler.Handle())
 	r.GET("/api/workflow-runs", handlers.ValidateOrigin(), apiHandler.GetWorkflowRuns())
 	r.GET("/api/workflow-jobs/:run_id", handlers.ValidateOrigin(), apiHandler.GetWorkflowJobsByRunID())
-	r.GET("/api/label-metrics", handlers.ValidateOrigin(), apiHandler.GetLabelMetrics())
 	r.GET("/api/metrics/query_range", handlers.ValidateOrigin(), apiHandler.GetCurrentMetrics())
 	r.GET("/events", sseHandler.HandleSSE())
 	r.GET("/dashboard", dashboardHandler.Dashboard())

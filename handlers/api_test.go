@@ -206,7 +206,6 @@ func TestGetWorkflowJobsByRunID_Success(t *testing.T) {
 			StartedAt:   time.Now(),
 			CompletedAt: time.Now().Add(5 * time.Minute),
 			RunID:       1,
-			RunnerType:  "self-hosted",
 		},
 	}
 	mockDB.On("GetWorkflowJobsByRunID", int64(1)).Return(expectedJobs, nil)
@@ -364,125 +363,6 @@ func TestGetWorkflowRuns_DatabaseError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 	assert.Contains(t, w.Body.String(), "Failed to retrieve workflow runs")
-
-	mockDB.AssertExpectations(t)
-}
-
-func TestGetLabelMetrics_Success(t *testing.T) {
-	router, mockDB, testConfig := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB)
-
-	// Mock data
-	expectedJobsByLabel := []models.LabelMetrics{
-		{
-			Labels:         []string{"self-hosted", "ubuntu-latest"},
-			RunnerType:     "self-hosted",
-			QueuedCount:    5,
-			RunningCount:   3,
-			CompletedCount: 10,
-			CancelledCount: 5,
-			TotalCount:     23,
-		},
-	}
-	mockDB.On("GetJobsByLabel", 1, 25).Return(expectedJobsByLabel, 1, nil)
-
-	router.GET("/api/label-metrics", handler.GetLabelMetrics())
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/label-metrics", nil)
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-
-	assert.Contains(t, response, "label_metrics")
-	assert.Contains(t, response, "pagination")
-
-	pagination := response["pagination"].(map[string]interface{})
-	assert.Equal(t, float64(1), pagination["current_page"])
-	assert.Equal(t, float64(1), pagination["total_pages"])
-	assert.Equal(t, float64(1), pagination["total_count"])
-	assert.Equal(t, float64(25), pagination["page_size"])
-	assert.Equal(t, false, pagination["has_next"])
-	assert.Equal(t, false, pagination["has_previous"])
-
-	mockDB.AssertExpectations(t)
-}
-
-func TestGetLabelMetrics_DatabaseError(t *testing.T) {
-	router, mockDB, testConfig := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB)
-
-	mockDB.On("GetJobsByLabel", 1, 25).Return([]models.LabelMetrics{}, 0, errors.New("database error"))
-
-	router.GET("/api/label-metrics", handler.GetLabelMetrics())
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/label-metrics", nil)
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "Failed to retrieve jobs metrics")
-
-	mockDB.AssertExpectations(t)
-}
-
-func TestGetLabelMetrics_WithPagination(t *testing.T) {
-	router, mockDB, testConfig := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB)
-
-	expectedMetrics := []models.LabelMetrics{}
-	mockDB.On("GetJobsByLabel", 2, 10).Return(expectedMetrics, 50, nil)
-
-	router.GET("/api/label-metrics", handler.GetLabelMetrics())
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/label-metrics?page=2&limit=10", nil)
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-
-	pagination := response["pagination"].(map[string]interface{})
-	assert.Equal(t, float64(2), pagination["current_page"])
-	assert.Equal(t, float64(5), pagination["total_pages"]) // 50/10 = 5
-	assert.Equal(t, float64(50), pagination["total_count"])
-	assert.Equal(t, float64(10), pagination["page_size"])
-	assert.Equal(t, true, pagination["has_next"])
-	assert.Equal(t, true, pagination["has_previous"])
-
-	mockDB.AssertExpectations(t)
-}
-
-func TestGetLabelMetrics_InvalidPagination(t *testing.T) {
-	router, mockDB, testConfig := setupAPITest()
-	handler := NewAPIHandler(testConfig, mockDB)
-
-	// Should default to page=1, limit=25 for invalid values
-	expectedMetrics := []models.LabelMetrics{}
-	mockDB.On("GetJobsByLabel", 1, 25).Return(expectedMetrics, 0, nil)
-
-	router.GET("/api/label-metrics", handler.GetLabelMetrics())
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/label-metrics?page=invalid&limit=200", nil)
-	router.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-
-	pagination := response["pagination"].(map[string]interface{})
-	assert.Equal(t, float64(1), pagination["current_page"])
-	assert.Equal(t, float64(25), pagination["page_size"])
 
 	mockDB.AssertExpectations(t)
 }
