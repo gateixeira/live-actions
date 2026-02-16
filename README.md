@@ -21,14 +21,14 @@ Real-time monitoring for GitHub Actions workflows and runners. A single self-con
 - Configurable tracking for GitHub-hosted vs self-hosted runners
 - Visual status for queued, running, completed, and failed jobs
 
-![Dashboard](images/dashboard.png)
+![Dashboard](images/dashboard-v2.png)
 
 #### **📋 Workflow Runs Management**
 - Complete history of recent workflow executions with pagination
 - Click to view individual job information for each workflow run
 - Real-time status updates (queued, in_progress, completed, failed)
 
-![Workflows](images/workflows.png)
+![Workflows](images/workflows-v2.png)
 
 #### **⚡ Runner Analytics**
 - Monitor workflow queue times and peak demand periods
