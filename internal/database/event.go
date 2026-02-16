@@ -1,7 +1,7 @@
 package database
 
 import (
-	"encoding/json"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -13,40 +13,43 @@ func (db *DBWrapper) StoreWebhookEvent(event *models.OrderedEvent) error {
 	var err error
 	maxRetries := 3
 
-	// Convert raw payload to JSON
-	var rawPayloadJSON interface{}
+	var rawPayloadStr string
 	if event.RawPayload != nil {
-		rawPayloadJSON = json.RawMessage(event.RawPayload)
+		rawPayloadStr = string(event.RawPayload)
 	}
 
-	// Always start as pending
 	status := "pending"
 	if event.ProcessedAt != nil {
 		status = "processed"
+	}
+
+	var processedAt interface{}
+	if event.ProcessedAt != nil {
+		processedAt = event.ProcessedAt.Format(time.RFC3339)
 	}
 
 	for range maxRetries {
 		_, err = DB.Exec(
 			`INSERT INTO webhook_events (delivery_id, event_type, sequence_id, 
             github_timestamp, received_at, processed_at, raw_payload, status, ordering_key, status_priority) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (delivery_id) DO UPDATE SET
-                event_type = EXCLUDED.event_type,
-                sequence_id = EXCLUDED.sequence_id,
-                github_timestamp = EXCLUDED.github_timestamp,
-                received_at = EXCLUDED.received_at,
-                processed_at = EXCLUDED.processed_at,
-                raw_payload = EXCLUDED.raw_payload,
-                status = EXCLUDED.status,
-                ordering_key = EXCLUDED.ordering_key,
-                status_priority = EXCLUDED.status_priority`,
+                event_type = excluded.event_type,
+                sequence_id = excluded.sequence_id,
+                github_timestamp = excluded.github_timestamp,
+                received_at = excluded.received_at,
+                processed_at = excluded.processed_at,
+                raw_payload = excluded.raw_payload,
+                status = excluded.status,
+                ordering_key = excluded.ordering_key,
+                status_priority = excluded.status_priority`,
 			event.Sequence.DeliveryID,
 			event.EventType,
 			event.Sequence.SequenceID,
-			event.Sequence.Timestamp,
-			event.Sequence.ReceivedAt,
-			event.ProcessedAt,
-			rawPayloadJSON,
+			event.Sequence.Timestamp.Format(time.RFC3339),
+			event.Sequence.ReceivedAt.Format(time.RFC3339),
+			processedAt,
+			rawPayloadStr,
 			status,
 			event.OrderingKey,
 			event.StatusPriority,
@@ -67,7 +70,7 @@ func (db *DBWrapper) GetPendingEventsGrouped(limit int) ([]*models.OrderedEvent,
         FROM webhook_events 
         WHERE status = 'pending' 
         ORDER BY github_timestamp ASC, ordering_key ASC, status_priority ASC
-        LIMIT $1`
+        LIMIT ?`
 
 	rows, err := DB.Query(query, limit)
 	if err != nil {
@@ -78,17 +81,18 @@ func (db *DBWrapper) GetPendingEventsGrouped(limit int) ([]*models.OrderedEvent,
 	var events []*models.OrderedEvent
 	for rows.Next() {
 		var event models.OrderedEvent
-		var rawPayloadJSON json.RawMessage
-		var processedAt *time.Time
+		var rawPayload string
+		var timestampStr, receivedAtStr string
+		var processedAt sql.NullString
 
 		err := rows.Scan(
 			&event.Sequence.DeliveryID,
 			&event.EventType,
 			&event.Sequence.SequenceID,
-			&event.Sequence.Timestamp,
-			&event.Sequence.ReceivedAt,
+			&timestampStr,
+			&receivedAtStr,
 			&processedAt,
-			&rawPayloadJSON,
+			&rawPayload,
 			&event.OrderingKey,
 			&event.StatusPriority,
 		)
@@ -97,8 +101,13 @@ func (db *DBWrapper) GetPendingEventsGrouped(limit int) ([]*models.OrderedEvent,
 		}
 
 		event.Sequence.EventID = event.Sequence.DeliveryID
-		event.ProcessedAt = processedAt
-		event.RawPayload = []byte(rawPayloadJSON)
+		event.Sequence.Timestamp = parseTime(timestampStr)
+		event.Sequence.ReceivedAt = parseTime(receivedAtStr)
+		if processedAt.Valid {
+			t := parseTime(processedAt.String)
+			event.ProcessedAt = &t
+		}
+		event.RawPayload = []byte(rawPayload)
 
 		events = append(events, &event)
 	}
@@ -107,15 +116,15 @@ func (db *DBWrapper) GetPendingEventsGrouped(limit int) ([]*models.OrderedEvent,
 }
 
 func (db *DBWrapper) GetPendingEventsByAge(maxAge time.Duration, limit int) ([]*models.OrderedEvent, error) {
-	cutoff := time.Now().Add(-maxAge)
+	cutoff := time.Now().Add(-maxAge).Format(time.RFC3339)
 
 	query := `
         SELECT delivery_id, event_type, sequence_id, github_timestamp, received_at, 
                processed_at, raw_payload, ordering_key, status_priority
         FROM webhook_events 
-        WHERE status = 'pending' AND received_at <= $1
+        WHERE status = 'pending' AND received_at <= ?
         ORDER BY github_timestamp ASC, ordering_key ASC, status_priority ASC
-        LIMIT $2`
+        LIMIT ?`
 
 	rows, err := DB.Query(query, cutoff, limit)
 	if err != nil {
@@ -126,17 +135,18 @@ func (db *DBWrapper) GetPendingEventsByAge(maxAge time.Duration, limit int) ([]*
 	var events []*models.OrderedEvent
 	for rows.Next() {
 		var event models.OrderedEvent
-		var rawPayloadJSON json.RawMessage
-		var processedAt *time.Time
+		var rawPayload string
+		var processedAt sql.NullString
+		var timestampStr, receivedAtStr string
 
 		err := rows.Scan(
 			&event.Sequence.DeliveryID,
 			&event.EventType,
 			&event.Sequence.SequenceID,
-			&event.Sequence.Timestamp,
-			&event.Sequence.ReceivedAt,
+			&timestampStr,
+			&receivedAtStr,
 			&processedAt,
-			&rawPayloadJSON,
+			&rawPayload,
 			&event.OrderingKey,
 			&event.StatusPriority,
 		)
@@ -145,8 +155,13 @@ func (db *DBWrapper) GetPendingEventsByAge(maxAge time.Duration, limit int) ([]*
 		}
 
 		event.Sequence.EventID = event.Sequence.DeliveryID
-		event.ProcessedAt = processedAt
-		event.RawPayload = []byte(rawPayloadJSON)
+		event.Sequence.Timestamp = parseTime(timestampStr)
+		event.Sequence.ReceivedAt = parseTime(receivedAtStr)
+		if processedAt.Valid {
+			t := parseTime(processedAt.String)
+			event.ProcessedAt = &t
+		}
+		event.RawPayload = []byte(rawPayload)
 
 		events = append(events, &event)
 	}
@@ -155,9 +170,9 @@ func (db *DBWrapper) GetPendingEventsByAge(maxAge time.Duration, limit int) ([]*
 }
 
 func (db *DBWrapper) MarkEventProcessed(deliveryID string) error {
-	now := time.Now()
+	now := time.Now().Format(time.RFC3339)
 	_, err := DB.Exec(
-		"UPDATE webhook_events SET status = 'processed', processed_at = $1 WHERE delivery_id = $2",
+		"UPDATE webhook_events SET status = 'processed', processed_at = ? WHERE delivery_id = ?",
 		now, deliveryID)
 	if err != nil {
 		return fmt.Errorf("failed to mark event as processed: %w", err)
@@ -167,7 +182,7 @@ func (db *DBWrapper) MarkEventProcessed(deliveryID string) error {
 
 func (db *DBWrapper) MarkEventFailed(deliveryID string) error {
 	_, err := DB.Exec(
-		"UPDATE webhook_events SET status = 'failed' WHERE delivery_id = $1",
+		"UPDATE webhook_events SET status = 'failed' WHERE delivery_id = ?",
 		deliveryID)
 	if err != nil {
 		return fmt.Errorf("failed to mark event as failed: %w", err)

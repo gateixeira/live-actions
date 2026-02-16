@@ -2,18 +2,39 @@ package database
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/gateixeira/live-actions/models"
-	"github.com/lib/pq"
 )
+
+// labelsToJSON converts a string slice to a JSON string for storage
+func labelsToJSON(labels []string) string {
+	if labels == nil {
+		labels = []string{}
+	}
+	b, _ := json.Marshal(labels)
+	return string(b)
+}
+
+// labelsFromJSON converts a JSON string back to a string slice
+func labelsFromJSON(s string) []string {
+	var labels []string
+	if s == "" {
+		return []string{}
+	}
+	json.Unmarshal([]byte(s), &labels)
+	if labels == nil {
+		return []string{}
+	}
+	return labels
+}
 
 // AddOrUpdateJob adds or updates a workflow job with atomicity checks.
 // It prevents older events from overwriting newer terminal states.
 // Returns (updated, error) where updated indicates if the job was actually updated.
 func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimestamp time.Time) (bool, error) {
-	// Start transaction
 	tx, err := DB.Begin()
 	if err != nil {
 		time.Sleep(time.Millisecond * 100)
@@ -22,9 +43,9 @@ func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimesta
 
 	var isTerminal bool
 	err = tx.QueryRow(`
-		SELECT CASE WHEN status IN ('completed', 'cancelled') THEN true ELSE false END as is_terminal
+		SELECT CASE WHEN status IN ('completed', 'cancelled') THEN 1 ELSE 0 END
 		FROM workflow_jobs 
-		WHERE id = $1 FOR UPDATE`, workflowJob.ID).Scan(&isTerminal)
+		WHERE id = ?`, workflowJob.ID).Scan(&isTerminal)
 
 	if err != nil && err != sql.ErrNoRows && isTerminal {
 		tx.Rollback()
@@ -33,20 +54,20 @@ func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimesta
 
 	_, err = tx.Exec(
 		`INSERT INTO workflow_jobs (id, name, status, runner_type, labels, conclusion, created_at, started_at, completed_at, updated_at, run_id) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
 		ON CONFLICT (id) DO UPDATE SET
-			name = EXCLUDED.name,
-			status = EXCLUDED.status,
-			runner_type = EXCLUDED.runner_type,
-			labels = EXCLUDED.labels,
-			conclusion = EXCLUDED.conclusion,
-			created_at = EXCLUDED.created_at,
-			started_at = EXCLUDED.started_at,
-			completed_at = EXCLUDED.completed_at,
-			updated_at = NOW(),
-			run_id = EXCLUDED.run_id`,
-		workflowJob.ID, string(workflowJob.Name), string(workflowJob.Status), string(workflowJob.RunnerType), pq.Array(workflowJob.Labels),
-		string(workflowJob.Conclusion), workflowJob.CreatedAt, workflowJob.StartedAt, workflowJob.CompletedAt, workflowJob.RunID,
+			name = excluded.name,
+			status = excluded.status,
+			runner_type = excluded.runner_type,
+			labels = excluded.labels,
+			conclusion = excluded.conclusion,
+			created_at = excluded.created_at,
+			started_at = excluded.started_at,
+			completed_at = excluded.completed_at,
+			updated_at = datetime('now'),
+			run_id = excluded.run_id`,
+		workflowJob.ID, string(workflowJob.Name), string(workflowJob.Status), string(workflowJob.RunnerType), labelsToJSON(workflowJob.Labels),
+		string(workflowJob.Conclusion), workflowJob.CreatedAt.Format(time.RFC3339), formatNullableTime(workflowJob.StartedAt), formatNullableTime(workflowJob.CompletedAt), workflowJob.RunID,
 	)
 
 	if err != nil {
@@ -62,7 +83,6 @@ func (db *DBWrapper) AddOrUpdateJob(workflowJob models.WorkflowJob, eventTimesta
 }
 
 func (db *DBWrapper) AddOrUpdateRun(workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error) {
-	// Start transaction
 	tx, err := DB.Begin()
 	if err != nil {
 		return false, fmt.Errorf("failed to start transaction: %w", err)
@@ -70,9 +90,9 @@ func (db *DBWrapper) AddOrUpdateRun(workflowRun models.WorkflowRun, eventTimesta
 
 	var isTerminal bool
 	err = tx.QueryRow(`
-		SELECT CASE WHEN status IN ('completed', 'cancelled') THEN true ELSE false END as is_terminal
+		SELECT CASE WHEN status IN ('completed', 'cancelled') THEN 1 ELSE 0 END
 		FROM workflow_runs 
-		WHERE id = $1 FOR UPDATE`, workflowRun.ID).Scan(&isTerminal)
+		WHERE id = ?`, workflowRun.ID).Scan(&isTerminal)
 
 	if err != nil && err != sql.ErrNoRows && isTerminal {
 		tx.Rollback()
@@ -82,20 +102,20 @@ func (db *DBWrapper) AddOrUpdateRun(workflowRun models.WorkflowRun, eventTimesta
 	_, err = tx.Exec(
 		`INSERT INTO workflow_runs (id, name, status, repository,
 		html_url, display_title, conclusion, created_at, run_started_at, updated_at) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET
-			name = EXCLUDED.name,
-			status = EXCLUDED.status,
-			repository = EXCLUDED.repository,
-			html_url = EXCLUDED.html_url,
-			display_title = EXCLUDED.display_title,
-			conclusion = EXCLUDED.conclusion,
-			created_at = EXCLUDED.created_at,
-			run_started_at = EXCLUDED.run_started_at,
-			updated_at = EXCLUDED.updated_at`,
+			name = excluded.name,
+			status = excluded.status,
+			repository = excluded.repository,
+			html_url = excluded.html_url,
+			display_title = excluded.display_title,
+			conclusion = excluded.conclusion,
+			created_at = excluded.created_at,
+			run_started_at = excluded.run_started_at,
+			updated_at = excluded.updated_at`,
 		workflowRun.ID, string(workflowRun.Name), string(workflowRun.Status), string(workflowRun.RepositoryName),
 		string(workflowRun.HtmlUrl), string(workflowRun.DisplayTitle), string(workflowRun.Conclusion),
-		workflowRun.CreatedAt, workflowRun.RunStartedAt, workflowRun.UpdatedAt,
+		workflowRun.CreatedAt.Format(time.RFC3339), formatNullableTime(workflowRun.RunStartedAt), formatNullableTime(workflowRun.UpdatedAt),
 	)
 
 	if err != nil {
@@ -112,37 +132,33 @@ func (db *DBWrapper) AddOrUpdateRun(workflowRun models.WorkflowRun, eventTimesta
 
 // GetWorkflowRunsPaginated retrieves workflow runs with pagination support
 func (db *DBWrapper) GetWorkflowRunsPaginated(page int, limit int) ([]models.WorkflowRun, int, error) {
-	// Calculate offset
 	offset := (page - 1) * limit
 
-	// Get total count
 	var totalCount int
 	err := DB.QueryRow("SELECT COUNT(*) FROM workflow_runs").Scan(&totalCount)
 	if err != nil {
-		// If no rows found (shouldn't happen with COUNT(*) but handle it anyway), return 0
 		if err == sql.ErrNoRows {
 			return []models.WorkflowRun{}, 0, nil
 		}
 		return nil, 0, err
 	}
 
-	// Get paginated results
-	rows, err := DB.Query("SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
+	rows, err := DB.Query("SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs ORDER BY created_at DESC LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var runs []models.WorkflowRun
-	var run models.WorkflowRun
-	var startedAt sql.NullTime
-	var updatedAt sql.NullTime
 	for rows.Next() {
-		if err := rows.Scan(&run.ID, &run.Name, &run.Status, &run.RepositoryName, &run.HtmlUrl, &run.DisplayTitle, &run.Conclusion, &run.CreatedAt, &startedAt, &updatedAt); err != nil {
+		var run models.WorkflowRun
+		var createdAt, startedAt, updatedAt sql.NullString
+		if err := rows.Scan(&run.ID, &run.Name, &run.Status, &run.RepositoryName, &run.HtmlUrl, &run.DisplayTitle, &run.Conclusion, &createdAt, &startedAt, &updatedAt); err != nil {
 			return nil, 0, err
 		}
-		run.RunStartedAt = startedAt.Time
-		run.UpdatedAt = updatedAt.Time
+		run.CreatedAt = parseTime(createdAt.String)
+		run.RunStartedAt = parseTime(startedAt.String)
+		run.UpdatedAt = parseTime(updatedAt.String)
 		runs = append(runs, run)
 	}
 
@@ -150,14 +166,11 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(page int, limit int) ([]models.Wor
 }
 
 func (db *DBWrapper) GetJobsByLabel(page int, limit int) ([]models.LabelMetrics, int, error) {
-	// Calculate offset
 	offset := (page - 1) * limit
 
-	// Count the total number of distinct label+runner_type combinations
 	var total int
-	err := DB.QueryRow("SELECT COUNT(*) FROM (SELECT DISTINCT labels, runner_type FROM workflow_jobs) AS distinct_combinations").Scan(&total)
+	err := DB.QueryRow("SELECT COUNT(*) FROM (SELECT DISTINCT labels, runner_type FROM workflow_jobs)").Scan(&total)
 	if err != nil {
-		// If no rows found (shouldn't happen with COUNT(*) but handle it anyway), return 0
 		if err == sql.ErrNoRows {
 			return []models.LabelMetrics{}, 0, nil
 		}
@@ -176,7 +189,7 @@ func (db *DBWrapper) GetJobsByLabel(page int, limit int) ([]models.LabelMetrics,
         FROM workflow_jobs 
         GROUP BY labels, runner_type
 		ORDER BY total_count DESC
-		LIMIT $1 OFFSET $2
+		LIMIT ? OFFSET ?
     `
 
 	rows, err := DB.Query(query, limit, offset)
@@ -185,18 +198,17 @@ func (db *DBWrapper) GetJobsByLabel(page int, limit int) ([]models.LabelMetrics,
 	}
 	defer rows.Close()
 
-	// type
 	var labelCounts []models.LabelMetrics
-	var labels []string
-	var runnerType string
-	var queuedCount, runningCount, completedCount, cancelledCount, totalCount int
 	for rows.Next() {
-		if err := rows.Scan(pq.Array(&labels), &runnerType, &queuedCount, &runningCount, &completedCount, &cancelledCount, &totalCount); err != nil {
+		var labelsJSON string
+		var runnerType string
+		var queuedCount, runningCount, completedCount, cancelledCount, totalCount int
+		if err := rows.Scan(&labelsJSON, &runnerType, &queuedCount, &runningCount, &completedCount, &cancelledCount, &totalCount); err != nil {
 			return nil, total, err
 		}
 
 		labelCounts = append(labelCounts, models.LabelMetrics{
-			Labels:         labels,
+			Labels:         labelsFromJSON(labelsJSON),
 			RunnerType:     models.RunnerType(runnerType),
 			QueuedCount:    queuedCount,
 			RunningCount:   runningCount,
@@ -210,23 +222,25 @@ func (db *DBWrapper) GetJobsByLabel(page int, limit int) ([]models.LabelMetrics,
 }
 
 func (db *DBWrapper) GetWorkflowJobsByRunID(runID int64) ([]models.WorkflowJob, error) {
-
-	rows, err := DB.Query("SELECT id, name, run_id, status, runner_type, labels, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = $1 ORDER BY created_at DESC", runID)
+	rows, err := DB.Query("SELECT id, name, run_id, status, runner_type, labels, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	var jobs []models.WorkflowJob
-	var job models.WorkflowJob
-	var startedAt sql.NullTime
-	var completed_at sql.NullTime
 	for rows.Next() {
-		if err := rows.Scan(&job.ID, &job.Name, &job.RunID, &job.Status, &job.RunnerType, pq.Array(&job.Labels), &job.Conclusion, &job.CreatedAt, &startedAt, &completed_at); err != nil {
+		var job models.WorkflowJob
+		var labelsJSON string
+		var createdAt string
+		var startedAt, completedAt sql.NullString
+		if err := rows.Scan(&job.ID, &job.Name, &job.RunID, &job.Status, &job.RunnerType, &labelsJSON, &job.Conclusion, &createdAt, &startedAt, &completedAt); err != nil {
 			return nil, err
 		}
-		job.StartedAt = startedAt.Time
-		job.CompletedAt = completed_at.Time
+		job.Labels = labelsFromJSON(labelsJSON)
+		job.CreatedAt = parseTime(createdAt)
+		job.StartedAt = parseTime(startedAt.String)
+		job.CompletedAt = parseTime(completedAt.String)
 		jobs = append(jobs, job)
 	}
 
@@ -236,51 +250,45 @@ func (db *DBWrapper) GetWorkflowJobsByRunID(runID int64) ([]models.WorkflowJob, 
 // GetWorkflowJobByID retrieves a single workflow job by its ID
 func (db *DBWrapper) GetWorkflowJobByID(jobID int64) (models.WorkflowJob, error) {
 	var job models.WorkflowJob
-	var labels []string
-	var runnerType string
-	var startedAt sql.NullTime
-	var completedAt sql.NullTime
+	var labelsJSON string
+	var createdAt string
+	var startedAt, completedAt sql.NullString
 
 	err := DB.QueryRow(`
 		SELECT id, name, run_id, status, runner_type, labels, conclusion, 
 			   created_at, started_at, completed_at 
 		FROM workflow_jobs 
-		WHERE id = $1`, jobID).Scan(
-		&job.ID, &job.Name, &job.RunID, &job.Status, &runnerType,
-		pq.Array(&labels), &job.Conclusion, &job.CreatedAt,
+		WHERE id = ?`, jobID).Scan(
+		&job.ID, &job.Name, &job.RunID, &job.Status, &job.RunnerType,
+		&labelsJSON, &job.Conclusion, &createdAt,
 		&startedAt, &completedAt)
 
 	if err != nil {
-		// Return empty job with default status if not found
 		if err == sql.ErrNoRows {
 			return models.WorkflowJob{Status: ""}, nil
 		}
 		return models.WorkflowJob{}, err
 	}
 
-	job.Labels = labels
-	job.RunnerType = models.RunnerType(runnerType)
-	job.StartedAt = startedAt.Time
-	job.CompletedAt = completedAt.Time
+	job.Labels = labelsFromJSON(labelsJSON)
+	job.CreatedAt = parseTime(createdAt)
+	job.StartedAt = parseTime(startedAt.String)
+	job.CompletedAt = parseTime(completedAt.String)
 
 	return job, nil
 }
 
 // CleanupOldData removes workflow runs and jobs older than the retention period
-// Returns the number of deleted workflow runs and workflow jobs
 func (db *DBWrapper) CleanupOldData(retentionPeriod time.Duration) (int64, int64, int64, error) {
-	// Calculate the cutoff time
-	cutoffTime := time.Now().Add(-retentionPeriod)
+	cutoffTime := time.Now().Add(-retentionPeriod).Format(time.RFC3339)
 
-	// Start a transaction to ensure both deletions are atomic
 	tx, err := DB.Begin()
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Delete old workflow jobs first (due to foreign key constraint)
-	jobResult, err := tx.Exec("DELETE FROM workflow_jobs WHERE created_at < $1", cutoffTime)
+	jobResult, err := tx.Exec("DELETE FROM workflow_jobs WHERE created_at < ?", cutoffTime)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to delete old workflow jobs: %w", err)
 	}
@@ -290,8 +298,7 @@ func (db *DBWrapper) CleanupOldData(retentionPeriod time.Duration) (int64, int64
 		return 0, 0, 0, fmt.Errorf("failed to get affected jobs count: %w", err)
 	}
 
-	// Delete old workflow runs
-	runResult, err := tx.Exec("DELETE FROM workflow_runs WHERE created_at < $1", cutoffTime)
+	runResult, err := tx.Exec("DELETE FROM workflow_runs WHERE created_at < ?", cutoffTime)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to delete old workflow runs: %w", err)
 	}
@@ -301,7 +308,7 @@ func (db *DBWrapper) CleanupOldData(retentionPeriod time.Duration) (int64, int64
 		return 0, 0, 0, fmt.Errorf("failed to get affected runs count: %w", err)
 	}
 
-	eventResult, err := tx.Exec("DELETE FROM webhook_events WHERE processed_at < $1", cutoffTime)
+	eventResult, err := tx.Exec("DELETE FROM webhook_events WHERE processed_at < ?", cutoffTime)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to delete old webhook events: %w", err)
 	}
@@ -311,7 +318,6 @@ func (db *DBWrapper) CleanupOldData(retentionPeriod time.Duration) (int64, int64
 		return 0, 0, 0, fmt.Errorf("failed to get affected events count: %w", err)
 	}
 
-	// Commit the transaction
 	if err := tx.Commit(); err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to commit cleanup transaction: %w", err)
 	}
@@ -353,4 +359,31 @@ func (db *DBWrapper) GetCurrentJobCounts() (map[string]map[string]int, error) {
 	}
 
 	return result, nil
+}
+
+// formatNullableTime formats a time.Time as RFC3339 string, returning nil for zero times
+func formatNullableTime(t time.Time) interface{} {
+	if t.IsZero() {
+		return nil
+	}
+	return t.Format(time.RFC3339)
+}
+
+// parseTime parses an RFC3339 string into time.Time, returning zero time on failure
+func parseTime(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		// Try other formats
+		t, err = time.Parse("2006-01-02 15:04:05-07:00", s)
+		if err != nil {
+			t, err = time.Parse("2006-01-02T15:04:05Z", s)
+			if err != nil {
+				return time.Time{}
+			}
+		}
+	}
+	return t
 }

@@ -21,8 +21,8 @@ func TestNewConfig(t *testing.T) {
 		if config.Vars.Port != "8080" {
 			t.Errorf("Expected Port to be 8080, got %s", config.Vars.Port)
 		}
-		if config.Vars.DatabaseURL != "postgresql://postgres:@localhost:5432/live-actions?sslmode=disable" {
-			t.Errorf("Expected DatabaseURL to be postgresql://postgres:@localhost:5432/live-actions?sslmode=disable, got %s", config.Vars.DatabaseURL)
+		if config.Vars.DatabaseURL != "./data/live-actions.db" {
+			t.Errorf("Expected DatabaseURL to be ./data/live-actions.db, got %s", config.Vars.DatabaseURL)
 		}
 		if config.Vars.LogLevel != "info" {
 			t.Errorf("Expected LogLevel to be info, got %s", config.Vars.LogLevel)
@@ -66,7 +66,7 @@ func TestGetDSN(t *testing.T) {
 		os.Setenv("RUNNER_TYPE_CONFIG_PATH", testConfigPath)
 
 		config := NewConfig()
-		expected := "postgresql://postgres:@localhost:5432/live-actions?sslmode=disable"
+		expected := "./data/live-actions.db"
 		if dsn := config.GetDSN(); dsn != expected {
 			t.Errorf("Expected DSN %s, got %s", expected, dsn)
 		}

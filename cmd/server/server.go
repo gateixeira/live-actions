@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gateixeira/live-actions/handlers"
@@ -27,7 +28,13 @@ func SetupAndRun() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	err := database.InitDB(config.GetDSN())
+	// Ensure data directory exists for SQLite
+	dbPath := config.GetDSN()
+	if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
+		os.MkdirAll(dir, 0755)
+	}
+
+	err := database.InitDB(dbPath)
 	if err != nil {
 		logger.Logger.Error("Failed to initialize database", zap.Error(err))
 		os.Exit(1)

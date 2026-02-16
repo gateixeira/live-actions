@@ -31,7 +31,7 @@ func NewConfig() *Config {
 	vars := Vars{
 		WebhookSecret:        os.Getenv("WEBHOOK_SECRET"),
 		Port:                 getEnvOrDefault("PORT", "8080"),
-		DatabaseURL:          getEnvOrDefault("DATABASE_URL", "postgresql://postgres:@localhost:5432/live-actions?sslmode=disable"),
+		DatabaseURL:          getEnvOrDefault("DATABASE_URL", "./data/live-actions.db"),
 		LogLevel:             getEnvOrDefault("LOG_LEVEL", "info"),
 		TLSEnabled:           getEnvOrDefault("TLS_ENABLED", "false") == "true",
 		Environment:          getEnvOrDefault("ENVIRONMENT", "development"),
