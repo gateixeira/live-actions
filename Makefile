@@ -1,4 +1,4 @@
-.PHONY: build build-frontend run test clean docker-build docker-run docker-down migrate-up migrate-down lint fmt fmt-imports vet check test-coverage clean-coverage all
+.PHONY: build build-frontend run test clean docker-build docker-run lint fmt fmt-imports vet check test-coverage clean-coverage all
 
 # Go related variables
 BINARY_NAME=live-actions
@@ -47,15 +47,11 @@ docker-build:
 	docker build -t $(BINARY_NAME) .
 
 # Run docker container
-docker-run:
-	docker compose --profile local up
-
-docker-run-remote:
-	docker compose --profile remote up
-
-docker-down:
-	docker compose --profile local down --volumes --remove-orphans
-	docker network prune -f
+docker-run: docker-build
+	docker run -p 8080:8080 \
+		-e WEBHOOK_SECRET=$${WEBHOOK_SECRET} \
+		-v live-actions-data:/app/data \
+		$(BINARY_NAME)
 
 # Install dependencies
 deps:

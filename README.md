@@ -67,14 +67,6 @@ docker run -p 8080:8080 \
   ghcr.io/gateixeira/live-actions:latest
 ```
 
-### Option 3: Docker Compose
-
-```bash
-# Copy .env.example to .env and set WEBHOOK_SECRET
-cp .env.example .env
-make docker-run-remote
-```
-
 ## Configuration
 
 | Variable | Default | Description |
