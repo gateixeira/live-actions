@@ -31,8 +31,9 @@ func ValidateGitHubWebhook(config *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		webhookSecret := config.Vars.WebhookSecret
 		if webhookSecret == "" {
-			logger.Logger.Warn("Warning: GITHUB_WEBHOOK_SECRET not set, webhook signature validation disabled")
-			c.Next()
+			logger.Logger.Error("WEBHOOK_SECRET is not configured, rejecting webhook")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Webhook secret not configured"})
+			c.Abort()
 			return
 		}
 
