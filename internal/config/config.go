@@ -1,6 +1,7 @@
 package config
 
 import (
+	"embed"
 	"fmt"
 	"os"
 	"strconv"
@@ -25,8 +26,9 @@ type Config struct {
 	RunnerTypeConfig *RunnerTypeConfig
 }
 
-// NewAppState creates and initializes a new application state
-func NewConfig() *Config {
+// NewConfig creates and initializes a new application config.
+// configFS provides the embedded config/ directory.
+func NewConfig(configFS ...embed.FS) *Config {
 	vars := Vars{
 		WebhookSecret:        os.Getenv("WEBHOOK_SECRET"),
 		Port:                 getEnvOrDefault("PORT", "8080"),
@@ -41,7 +43,15 @@ func NewConfig() *Config {
 
 	config := &Config{Vars: vars}
 
-	runnerTypeConfig, err := LoadRunnerTypeConfig(vars.RunnerTypeConfigPath)
+	var runnerTypeConfig *RunnerTypeConfig
+	var err error
+
+	// Try embedded FS first, then fall back to disk
+	if len(configFS) > 0 {
+		runnerTypeConfig, err = LoadRunnerTypeConfigFromFS(configFS[0], vars.RunnerTypeConfigPath)
+	} else {
+		runnerTypeConfig, err = LoadRunnerTypeConfig(vars.RunnerTypeConfigPath)
+	}
 	if err != nil {
 		panic(fmt.Errorf("failed to load runner type config: %w", err))
 	}

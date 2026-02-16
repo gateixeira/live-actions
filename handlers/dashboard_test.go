@@ -3,8 +3,8 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/gateixeira/live-actions/internal/config"
@@ -164,7 +164,7 @@ func NewTestConfig(isHTTPS, isProduction bool) *config.Config {
 	}
 }
 
-func setupDashboardTest() (*gin.Engine, *config.Config) {
+func setupDashboardTest() (*gin.Engine, *config.Config, fstest.MapFS) {
 	// Initialize logger for tests
 	logger.InitLogger("error")
 
@@ -172,24 +172,28 @@ func setupDashboardTest() (*gin.Engine, *config.Config) {
 	router := gin.New()
 	testConfig := NewTestConfig(false, false) // Default to development/HTTP
 
-	// Ensure we're in the project root so c.File("./static/dist/index.html") resolves
-	if _, err := os.Stat("./static/dist/index.html"); err != nil {
-		os.Chdir("..")
+	testFS := fstest.MapFS{
+		"frontend/dist/index.html": &fstest.MapFile{
+			Data: []byte("<!DOCTYPE html><html><head></head><body>test</body></html>"),
+		},
 	}
 
-	return router, testConfig
+	return router, testConfig, testFS
 }
 
 func TestNewDashboardHandler(t *testing.T) {
 	testConfig := NewTestConfig(false, false)
-	handler := NewDashboardHandler(testConfig)
+	testFS := fstest.MapFS{
+		"frontend/dist/index.html": &fstest.MapFile{Data: []byte("<html><head></head></html>")},
+	}
+	handler := NewDashboardHandler(testConfig, testFS)
 
 	assert.NotNil(t, handler, "NewDashboardHandler should return a non-nil handler")
 	assert.Equal(t, testConfig, handler.config, "Handler should store the config")
 }
 
 func TestValidateDashboardOrigin_MissingReferer(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, _ := setupDashboardTest()
 	router.Use(ValidateDashboardOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -204,7 +208,7 @@ func TestValidateDashboardOrigin_MissingReferer(t *testing.T) {
 }
 
 func TestValidateDashboardOrigin_InvalidReferer(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, _ := setupDashboardTest()
 	router.Use(ValidateDashboardOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -220,7 +224,7 @@ func TestValidateDashboardOrigin_InvalidReferer(t *testing.T) {
 }
 
 func TestValidateDashboardOrigin_WrongHost(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, _ := setupDashboardTest()
 	router.Use(ValidateDashboardOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -237,7 +241,7 @@ func TestValidateDashboardOrigin_WrongHost(t *testing.T) {
 }
 
 func TestValidateDashboardOrigin_WrongPath(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, _ := setupDashboardTest()
 	router.Use(ValidateDashboardOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -255,7 +259,7 @@ func TestValidateDashboardOrigin_WrongPath(t *testing.T) {
 }
 
 func TestValidateDashboardOrigin_MissingCSRFCookie(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, _ := setupDashboardTest()
 	router.Use(ValidateDashboardOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -272,7 +276,7 @@ func TestValidateDashboardOrigin_MissingCSRFCookie(t *testing.T) {
 }
 
 func TestValidateDashboardOrigin_MissingCSRFHeader(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, _ := setupDashboardTest()
 	router.Use(ValidateDashboardOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -293,7 +297,7 @@ func TestValidateDashboardOrigin_MissingCSRFHeader(t *testing.T) {
 }
 
 func TestValidateDashboardOrigin_MismatchedCSRFToken(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, _ := setupDashboardTest()
 	router.Use(ValidateDashboardOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -315,7 +319,7 @@ func TestValidateDashboardOrigin_MismatchedCSRFToken(t *testing.T) {
 }
 
 func TestValidateDashboardOrigin_Success(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, _ := setupDashboardTest()
 	router.Use(ValidateDashboardOrigin())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -337,8 +341,8 @@ func TestValidateDashboardOrigin_Success(t *testing.T) {
 }
 
 func TestDashboard_CSRFTokenGeneration(t *testing.T) {
-	router, testConfig := setupDashboardTest()
-	handler := NewDashboardHandler(testConfig)
+	router, testConfig, testFS := setupDashboardTest()
+	handler := NewDashboardHandler(testConfig, testFS)
 
 	router.GET("/dashboard", handler.Dashboard())
 
@@ -371,9 +375,9 @@ func TestDashboard_CSRFTokenGeneration(t *testing.T) {
 }
 
 func TestDashboard_SecureCookieInProduction(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, testFS := setupDashboardTest()
 	testConfig := NewTestConfig(false, true) // Production environment
-	handler := NewDashboardHandler(testConfig)
+	handler := NewDashboardHandler(testConfig, testFS)
 
 	router.GET("/dashboard", handler.Dashboard())
 
@@ -398,9 +402,9 @@ func TestDashboard_SecureCookieInProduction(t *testing.T) {
 }
 
 func TestDashboard_SecureCookieWithHTTPS(t *testing.T) {
-	router, _ := setupDashboardTest()
+	router, _, testFS := setupDashboardTest()
 	testConfig := NewTestConfig(true, false) // HTTPS enabled
-	handler := NewDashboardHandler(testConfig)
+	handler := NewDashboardHandler(testConfig, testFS)
 
 	router.GET("/dashboard", handler.Dashboard())
 
@@ -425,8 +429,8 @@ func TestDashboard_SecureCookieWithHTTPS(t *testing.T) {
 }
 
 func TestDashboard_CookieExpiry(t *testing.T) {
-	router, testConfig := setupDashboardTest()
-	handler := NewDashboardHandler(testConfig)
+	router, testConfig, testFS := setupDashboardTest()
+	handler := NewDashboardHandler(testConfig, testFS)
 
 	router.GET("/dashboard", handler.Dashboard())
 
@@ -453,8 +457,8 @@ func TestDashboard_CookieExpiry(t *testing.T) {
 
 func TestDashboard_TemplateDataStructure(t *testing.T) {
 	// Test that the dashboard handler serves the React SPA correctly
-	router, testConfig := setupDashboardTest()
-	handler := NewDashboardHandler(testConfig)
+	router, testConfig, testFS := setupDashboardTest()
+	handler := NewDashboardHandler(testConfig, testFS)
 
 	router.GET("/dashboard", handler.Dashboard())
 
@@ -467,8 +471,8 @@ func TestDashboard_TemplateDataStructure(t *testing.T) {
 
 // Integration test for the ValidateDashboardOrigin middleware with Dashboard handler
 func TestIntegration_ValidateDashboardOriginWithDashboard(t *testing.T) {
-	router, testConfig := setupDashboardTest()
-	handler := NewDashboardHandler(testConfig)
+	router, testConfig, testFS := setupDashboardTest()
+	handler := NewDashboardHandler(testConfig, testFS)
 
 	// Setup route with middleware
 	router.Use(ValidateDashboardOrigin())
@@ -529,9 +533,9 @@ func TestDashboardHandler_ConfigIntegration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			router, _ := setupDashboardTest()
+			router, _, testFS := setupDashboardTest()
 			testConfig := NewTestConfig(tc.isHTTPS, tc.isProduction)
-			handler := NewDashboardHandler(testConfig)
+			handler := NewDashboardHandler(testConfig, testFS)
 
 			router.GET("/dashboard", handler.Dashboard())
 
@@ -567,8 +571,8 @@ func TestDashboard_WithRealConfig(t *testing.T) {
 		},
 	}
 
-	router, _ := setupDashboardTest()
-	handler := NewDashboardHandler(realConfig)
+	router, _, testFS := setupDashboardTest()
+	handler := NewDashboardHandler(realConfig, testFS)
 
 	router.GET("/dashboard", handler.Dashboard())
 
@@ -594,8 +598,8 @@ func TestDashboard_WithRealConfig(t *testing.T) {
 
 // Test SameSite cookie attribute
 func TestDashboard_SameSiteCookie(t *testing.T) {
-	router, testConfig := setupDashboardTest()
-	handler := NewDashboardHandler(testConfig)
+	router, testConfig, testFS := setupDashboardTest()
+	handler := NewDashboardHandler(testConfig, testFS)
 
 	router.GET("/dashboard", handler.Dashboard())
 

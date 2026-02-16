@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -16,11 +16,12 @@ import (
 )
 
 type DashboardHandler struct {
-	config *config.Config
+	config   *config.Config
+	staticFS fs.FS
 }
 
-func NewDashboardHandler(config *config.Config) *DashboardHandler {
-	return &DashboardHandler{config: config}
+func NewDashboardHandler(config *config.Config, staticFS fs.FS) *DashboardHandler {
+	return &DashboardHandler{config: config, staticFS: staticFS}
 }
 
 // ValidateDashboardOrigin middleware ensures requests come from the dashboard UI
@@ -117,7 +118,7 @@ func (h *DashboardHandler) Dashboard() gin.HandlerFunc {
 		c.Header("Pragma", "no-cache")
 		c.Header("Expires", "0")
 
-		htmlBytes, err := os.ReadFile("./static/dist/index.html")
+		htmlBytes, err := fs.ReadFile(h.staticFS, "frontend/dist/index.html")
 		if err != nil {
 			logger.Logger.Error("Failed to read index.html", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load dashboard"})

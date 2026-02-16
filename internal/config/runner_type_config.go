@@ -1,6 +1,7 @@
 package config
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,12 +16,26 @@ type RunnerTypeConfig struct {
 	DefaultRunnerType  models.RunnerType `json:"default_runner_type"`
 }
 
-// LoadRunnerTypeConfig loads runner type configuration from file or returns default
+// LoadRunnerTypeConfig loads runner type configuration from a file on disk.
 func LoadRunnerTypeConfig(configPath string) (*RunnerTypeConfig, error) {
-	// Read and parse the config file
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read runner type config file: %w", err)
+	}
+
+	var config RunnerTypeConfig
+	if err := json.Unmarshal(configData, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse runner type config JSON: %w", err)
+	}
+
+	return &config, nil
+}
+
+// LoadRunnerTypeConfigFromFS loads runner type configuration from an embedded FS.
+func LoadRunnerTypeConfigFromFS(fsys embed.FS, configPath string) (*RunnerTypeConfig, error) {
+	configData, err := fsys.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read runner type config from embedded FS: %w", err)
 	}
 
 	var config RunnerTypeConfig

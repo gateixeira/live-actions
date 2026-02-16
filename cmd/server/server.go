@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"embed"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,18 +20,18 @@ import (
 )
 
 // SetupAndRun configures the router and starts the server
-func SetupAndRun() {
-	config := config.NewConfig()
+func SetupAndRun(staticFS, configFS embed.FS) {
+	cfg := config.NewConfig(configFS)
 
-	logger.InitLogger(config.Vars.LogLevel)
+	logger.InitLogger(cfg.Vars.LogLevel)
 	defer logger.SyncLogger()
 
-	if config.IsProduction() {
+	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	// Ensure data directory exists for SQLite
-	dbPath := config.GetDSN()
+	dbPath := cfg.GetDSN()
 	if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
 		os.MkdirAll(dir, 0755)
 	}
@@ -50,14 +52,14 @@ func SetupAndRun() {
 
 	ctx := context.Background()
 
-	cleanupService := services.NewCleanupService(config, db, ctx)
+	cleanupService := services.NewCleanupService(cfg, db, ctx)
 	metricsService := services.NewMetricsUpdateService(db, 10*time.Second, ctx)
 
 	handlers.InitSSEHandler()
 	sseHandler := handlers.GetSSEHandler()
-	webhookHandler := handlers.NewWebhookHandler(config, db)
-	apiHandler := handlers.NewAPIHandler(config, db)
-	dashboardHandler := handlers.NewDashboardHandler(config)
+	webhookHandler := handlers.NewWebhookHandler(cfg, db)
+	apiHandler := handlers.NewAPIHandler(cfg, db)
+	dashboardHandler := handlers.NewDashboardHandler(cfg, staticFS)
 	rootHandler := handlers.NewRootHandler()
 	metricsHandler := handlers.NewMetricsHandler()
 
@@ -69,12 +71,15 @@ func SetupAndRun() {
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.InputValidator())
 
-	r.Static("/static", "./static")
-	r.Static("/assets", "./static/dist/assets")
+	// Serve static assets from embedded FS
+	distFS, _ := fs.Sub(staticFS, "frontend/dist")
+	assetsFS, _ := fs.Sub(staticFS, "frontend/dist/assets")
+	r.StaticFS("/static", http.FS(distFS))
+	r.StaticFS("/assets", http.FS(assetsFS))
 
 	// Routes
 	r.GET("/", rootHandler.Root())
-	r.POST("/webhook", handlers.ValidateGitHubWebhook(config), webhookHandler.Handle())
+	r.POST("/webhook", handlers.ValidateGitHubWebhook(cfg), webhookHandler.Handle())
 	r.GET("/api/workflow-runs", handlers.ValidateOrigin(), apiHandler.GetWorkflowRuns())
 	r.GET("/api/workflow-jobs/:run_id", handlers.ValidateOrigin(), apiHandler.GetWorkflowJobsByRunID())
 	r.GET("/api/label-metrics", handlers.ValidateOrigin(), apiHandler.GetLabelMetrics())
@@ -85,7 +90,7 @@ func SetupAndRun() {
 
 	// Create HTTP server
 	srv := &http.Server{
-		Addr:         ":" + config.Vars.Port,
+		Addr:         ":" + cfg.Vars.Port,
 		Handler:      r,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -100,12 +105,12 @@ func SetupAndRun() {
 	go gracefulShutdown.Start()
 
 	logger.Logger.Info("Starting server",
-		zap.String("port", config.Vars.Port),
-		zap.String("environment", config.Vars.Environment),
-		zap.Bool("tls_enabled", config.Vars.TLSEnabled),
-		zap.Int("data_retention_days", config.Vars.DataRetentionDays),
-		zap.Int("cleanup_interval_hours", config.Vars.CleanupIntervalHours),
-		zap.String("log_level", config.Vars.LogLevel),
+		zap.String("port", cfg.Vars.Port),
+		zap.String("environment", cfg.Vars.Environment),
+		zap.Bool("tls_enabled", cfg.Vars.TLSEnabled),
+		zap.Int("data_retention_days", cfg.Vars.DataRetentionDays),
+		zap.Int("cleanup_interval_hours", cfg.Vars.CleanupIntervalHours),
+		zap.String("log_level", cfg.Vars.LogLevel),
 	)
 
 	// Start server
