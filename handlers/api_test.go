@@ -121,8 +121,9 @@ func TestValidateOrigin_WrongPath(t *testing.T) {
 	req.Header.Set("Referer", "http://localhost:8080/wrong-path")
 	router.ServeHTTP(w, req)
 
+	// Same host passes the origin check but fails on missing CSRF cookie
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "can only be accessed from the local dashboard")
+	assert.Contains(t, w.Body.String(), "Invalid CSRF cookie")
 }
 
 func TestValidateOrigin_MissingCSRFCookie(t *testing.T) {

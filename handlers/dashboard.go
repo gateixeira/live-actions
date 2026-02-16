@@ -1,13 +1,18 @@
 package handlers
 
 import (
+	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gateixeira/live-actions/internal/config"
 	"github.com/gateixeira/live-actions/internal/utils"
+	"github.com/gateixeira/live-actions/pkg/logger"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type DashboardHandler struct {
@@ -43,8 +48,14 @@ func ValidateDashboardOrigin() gin.HandlerFunc {
 		// Get the request host
 		requestHost := c.Request.Host
 
-		// Compare hosts and path
-		if refererURL.Host != requestHost || refererURL.Path != "/dashboard" {
+		// Compare hostnames (ignore port to support dev proxy setups)
+		refererHostname := refererURL.Hostname()
+		requestHostname := requestHost
+		if h, _, err := net.SplitHostPort(requestHost); err == nil {
+			requestHostname = h
+		}
+
+		if refererHostname != requestHostname {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "Access denied. This endpoint can only be accessed from the local dashboard.",
 			})
@@ -101,16 +112,26 @@ func (h *DashboardHandler) Dashboard() gin.HandlerFunc {
 			true,                        // HTTP only
 		)
 
-		// Create template data with metrics
-		templateData := gin.H{
-			"csrfToken": csrfToken,
-			"timestamp": time.Now().Unix(),
-		}
-
-		// Render template with data
+		// Serve the React SPA index.html with CSRF token injected
 		c.Header("Cache-Control", "no-store, must-revalidate")
 		c.Header("Pragma", "no-cache")
 		c.Header("Expires", "0")
-		c.HTML(http.StatusOK, "dashboard.html", templateData)
+
+		htmlBytes, err := os.ReadFile("./static/dist/index.html")
+		if err != nil {
+			logger.Logger.Error("Failed to read index.html", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load dashboard"})
+			return
+		}
+
+		// Inject CSRF token as a meta tag
+		html := strings.Replace(
+			string(htmlBytes),
+			"<head>",
+			`<head><meta name="csrf-token" content="`+csrfToken+`">`,
+			1,
+		)
+
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 	}
 }

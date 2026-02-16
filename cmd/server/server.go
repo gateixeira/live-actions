@@ -64,7 +64,7 @@ func SetupAndRun() {
 	r.Use(middleware.InputValidator())
 
 	r.Static("/static", "./static")
-	r.LoadHTMLGlob("templates/*")
+	r.Static("/assets", "./static/dist/assets")
 
 	// Routes
 	r.GET("/", rootHandler.Root())

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -52,8 +53,14 @@ func ValidateOrigin() gin.HandlerFunc {
 		// Get the request host
 		requestHost := c.Request.Host
 
-		// Compare hosts and path
-		if refererURL.Host != requestHost || refererURL.Path != "/dashboard" {
+		// Compare hostnames (ignore port to support dev proxy setups)
+		refererHostname := refererURL.Hostname()
+		requestHostname := requestHost
+		if h, _, err := net.SplitHostPort(requestHost); err == nil {
+			requestHostname = h
+		}
+
+		if refererHostname != requestHostname {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "Access denied. This endpoint can only be accessed from the local dashboard.",
 			})

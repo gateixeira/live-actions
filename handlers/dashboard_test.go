@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -170,6 +171,12 @@ func setupDashboardTest() (*gin.Engine, *config.Config) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	testConfig := NewTestConfig(false, false) // Default to development/HTTP
+
+	// Ensure we're in the project root so c.File("./static/dist/index.html") resolves
+	if _, err := os.Stat("./static/dist/index.html"); err != nil {
+		os.Chdir("..")
+	}
+
 	return router, testConfig
 }
 
@@ -242,8 +249,9 @@ func TestValidateDashboardOrigin_WrongPath(t *testing.T) {
 	req.Header.Set("Referer", "http://localhost:8080/wrong-path")
 	router.ServeHTTP(w, req)
 
+	// Same host passes the origin check but fails on missing CSRF cookie
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "can only be accessed from the local dashboard")
+	assert.Contains(t, w.Body.String(), "Invalid CSRF cookie")
 }
 
 func TestValidateDashboardOrigin_MissingCSRFCookie(t *testing.T) {
@@ -332,8 +340,6 @@ func TestDashboard_CSRFTokenGeneration(t *testing.T) {
 	router, testConfig := setupDashboardTest()
 	handler := NewDashboardHandler(testConfig)
 
-	// Setup template loading
-	router.LoadHTMLGlob("../templates/*.html")
 	router.GET("/dashboard", handler.Dashboard())
 
 	w := httptest.NewRecorder()
@@ -369,8 +375,6 @@ func TestDashboard_SecureCookieInProduction(t *testing.T) {
 	testConfig := NewTestConfig(false, true) // Production environment
 	handler := NewDashboardHandler(testConfig)
 
-	// Setup template loading
-	router.LoadHTMLGlob("../templates/*.html")
 	router.GET("/dashboard", handler.Dashboard())
 
 	w := httptest.NewRecorder()
@@ -398,8 +402,6 @@ func TestDashboard_SecureCookieWithHTTPS(t *testing.T) {
 	testConfig := NewTestConfig(true, false) // HTTPS enabled
 	handler := NewDashboardHandler(testConfig)
 
-	// Setup template loading
-	router.LoadHTMLGlob("../templates/*.html")
 	router.GET("/dashboard", handler.Dashboard())
 
 	w := httptest.NewRecorder()
@@ -426,8 +428,6 @@ func TestDashboard_CookieExpiry(t *testing.T) {
 	router, testConfig := setupDashboardTest()
 	handler := NewDashboardHandler(testConfig)
 
-	// Setup template loading
-	router.LoadHTMLGlob("../templates/*.html")
 	router.GET("/dashboard", handler.Dashboard())
 
 	w := httptest.NewRecorder()
@@ -452,14 +452,10 @@ func TestDashboard_CookieExpiry(t *testing.T) {
 }
 
 func TestDashboard_TemplateDataStructure(t *testing.T) {
-	// Note: This test would need to inspect the template data passed to the HTML template
-	// Since we can't easily mock the metrics registry in this test setup, we'll test
-	// the structure by checking for expected HTTP 200 and no template errors
+	// Test that the dashboard handler serves the React SPA correctly
 	router, testConfig := setupDashboardTest()
 	handler := NewDashboardHandler(testConfig)
 
-	// Setup template loading
-	router.LoadHTMLGlob("../templates/*.html")
 	router.GET("/dashboard", handler.Dashboard())
 
 	w := httptest.NewRecorder()
@@ -467,8 +463,6 @@ func TestDashboard_TemplateDataStructure(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	// If template rendering fails, we'd get a 500 error
-	// The fact that we get 200 means the template data structure is valid
 }
 
 // Integration test for the ValidateDashboardOrigin middleware with Dashboard handler
@@ -478,7 +472,6 @@ func TestIntegration_ValidateDashboardOriginWithDashboard(t *testing.T) {
 
 	// Setup route with middleware
 	router.Use(ValidateDashboardOrigin())
-	router.LoadHTMLGlob("../templates/*.html")
 	router.GET("/dashboard", handler.Dashboard())
 
 	// Test with valid CSRF and referer
@@ -540,7 +533,6 @@ func TestDashboardHandler_ConfigIntegration(t *testing.T) {
 			testConfig := NewTestConfig(tc.isHTTPS, tc.isProduction)
 			handler := NewDashboardHandler(testConfig)
 
-			router.LoadHTMLGlob("../templates/*.html")
 			router.GET("/dashboard", handler.Dashboard())
 
 			w := httptest.NewRecorder()
@@ -578,7 +570,6 @@ func TestDashboard_WithRealConfig(t *testing.T) {
 	router, _ := setupDashboardTest()
 	handler := NewDashboardHandler(realConfig)
 
-	router.LoadHTMLGlob("../templates/*.html")
 	router.GET("/dashboard", handler.Dashboard())
 
 	w := httptest.NewRecorder()
@@ -606,7 +597,6 @@ func TestDashboard_SameSiteCookie(t *testing.T) {
 	router, testConfig := setupDashboardTest()
 	handler := NewDashboardHandler(testConfig)
 
-	router.LoadHTMLGlob("../templates/*.html")
 	router.GET("/dashboard", handler.Dashboard())
 
 	w := httptest.NewRecorder()

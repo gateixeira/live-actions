@@ -1,4 +1,4 @@
-.PHONY: build run test clean docker-build docker-run docker-down migrate-up migrate-down lint fmt fmt-imports vet check test-coverage clean-coverage all
+.PHONY: build build-frontend run test clean docker-build docker-run docker-down migrate-up migrate-down lint fmt fmt-imports vet check test-coverage clean-coverage all
 
 # Go related variables
 BINARY_NAME=live-actions
@@ -21,8 +21,12 @@ GOCLEAN=$(GOCMD) clean
 GOGET=$(GOCMD) get
 GOLINT=golangci-lint
 
+# Build the frontend React app
+build-frontend:
+	cd frontend && npm install && npm run build
+
 # Build the application
-build:
+build: build-frontend
 	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) $(MAIN_PACKAGE)
 
 # Run the application
