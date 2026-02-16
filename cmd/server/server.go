@@ -33,7 +33,7 @@ func SetupAndRun(staticFS embed.FS) {
 	// Ensure data directory exists for SQLite
 	dbPath := cfg.GetDSN()
 	if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
-		os.MkdirAll(dir, 0755)
+		os.MkdirAll(dir, 0700)
 	}
 
 	err := database.InitDB(dbPath)
@@ -70,8 +70,14 @@ func SetupAndRun(staticFS embed.FS) {
 	r.Use(middleware.InputValidator())
 
 	// Serve static assets from embedded FS
-	distFS, _ := fs.Sub(staticFS, "frontend/dist")
-	assetsFS, _ := fs.Sub(staticFS, "frontend/dist/assets")
+	distFS, err := fs.Sub(staticFS, "frontend/dist")
+	if err != nil {
+		logger.Logger.Fatal("Failed to load embedded frontend/dist", zap.Error(err))
+	}
+	assetsFS, err := fs.Sub(staticFS, "frontend/dist/assets")
+	if err != nil {
+		logger.Logger.Fatal("Failed to load embedded frontend/dist/assets", zap.Error(err))
+	}
 	r.StaticFS("/static", http.FS(distFS))
 	r.StaticFS("/assets", http.FS(assetsFS))
 
@@ -85,7 +91,10 @@ func SetupAndRun(staticFS embed.FS) {
 	r.GET("/metrics", metricsHandler.Metrics())
 
 	// Serve the React SPA for all other routes
-	indexHTML, _ := fs.ReadFile(staticFS, "frontend/dist/index.html")
+	indexHTML, err := fs.ReadFile(staticFS, "frontend/dist/index.html")
+	if err != nil {
+		logger.Logger.Fatal("Failed to load embedded index.html", zap.Error(err))
+	}
 	r.NoRoute(func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	})
