@@ -86,3 +86,13 @@ func (m *MockDatabase) GetMetricsSummary(ctx context.Context, since time.Duratio
 	args := m.Called(ctx, since)
 	return args.Get(0).(map[string]float64), args.Error(1)
 }
+
+func (m *MockDatabase) GetFailureAnalytics(ctx context.Context, since time.Duration) (*models.FailureAnalytics, error) {
+	args := m.Called(ctx, since)
+	return args.Get(0).(*models.FailureAnalytics), args.Error(1)
+}
+
+func (m *MockDatabase) GetFailureTrend(ctx context.Context, since time.Duration) ([]models.FailureTrendPoint, error) {
+	args := m.Called(ctx, since)
+	return args.Get(0).([]models.FailureTrendPoint), args.Error(1)
+}

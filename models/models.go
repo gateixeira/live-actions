@@ -131,3 +131,29 @@ type MetricsSnapshot struct {
 	Running   int   `json:"running"`
 	Queued    int   `json:"queued"`
 }
+
+// FailingJob represents a job's failure statistics.
+type FailingJob struct {
+	Name        string  `json:"name"`
+	HtmlUrl     string  `json:"html_url"`
+	Failures    int     `json:"failures"`
+	Total       int     `json:"total"`
+	FailureRate float64 `json:"failure_rate"`
+}
+
+// FailureAnalytics contains summary failure metrics.
+type FailureAnalytics struct {
+	TotalCompleted  int          `json:"total_completed"`
+	TotalFailed     int          `json:"total_failed"`
+	TotalCancelled  int          `json:"total_cancelled"`
+	FailureRate     float64      `json:"failure_rate"`
+	TopFailingJobs  []FailingJob `json:"top_failing_jobs"`
+}
+
+// FailureTrendPoint represents failure counts at a point in time.
+type FailureTrendPoint struct {
+	Timestamp  int64 `json:"timestamp"`
+	Failures   int   `json:"failures"`
+	Successes  int   `json:"successes"`
+	Cancelled  int   `json:"cancelled"`
+}

@@ -34,6 +34,10 @@ type DatabaseInterface interface {
 
 	// Cleanup
 	CleanupOldData(ctx context.Context, retentionPeriod time.Duration) (int64, int64, int64, error)
+
+	// Failure Analytics
+	GetFailureAnalytics(ctx context.Context, since time.Duration) (*models.FailureAnalytics, error)
+	GetFailureTrend(ctx context.Context, since time.Duration) ([]models.FailureTrendPoint, error)
 }
 
 // DBWrapper wraps the actual DB instance and implements DatabaseInterface

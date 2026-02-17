@@ -49,7 +49,12 @@ export WEBHOOK_SECRET=$(openssl rand -hex 32)
 ./live-actions
 ```
 
-Open `http://localhost:8080` in your browser.
+> **macOS users**: If you see _"live-actions-darwin-arm64" can't be opened_, run:
+> ```bash
+> xattr -d com.apple.quarantine ./live-actions-darwin-arm64
+> ```
+
+Open `http://localhost:8080` in your browser to access the dashboard.
 
 ### Option 2: Docker
 
@@ -59,6 +64,16 @@ docker run -p 8080:8080 \
   -v live-actions-data:/app/data \
   ghcr.io/gateixeira/live-actions:latest
 ```
+
+## Accessing the UI
+
+Once the application is running, open **`http://localhost:8080`** (or your configured port) in a browser. The dashboard has three main sections:
+
+- **Metrics Cards** — Current running jobs, queued jobs, average queue time, and peak demand at a glance.
+- **Demand Chart** — Historical view of runner demand (running vs queued jobs) with period filters: 1 hour, 1 day, 1 week, or 1 month.
+- **Workflow Runs Table** — Paginated list of recent workflow executions. Click any row to expand and see individual job details, statuses, and links.
+
+The UI updates in real time via Server-Sent Events — no manual refresh needed.
 
 ## Configuration
 

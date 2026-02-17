@@ -88,3 +88,31 @@ export interface MetricsResponse {
 }
 
 export type Period = 'hour' | 'day' | 'week' | 'month'
+
+export interface FailingJob {
+  name: string
+  html_url: string
+  failures: number
+  total: number
+  failure_rate: number
+}
+
+export interface FailureAnalyticsSummary {
+  total_completed: number
+  total_failed: number
+  total_cancelled: number
+  failure_rate: number
+  top_failing_jobs: FailingJob[]
+}
+
+export interface FailureTrendPoint {
+  timestamp: number
+  failures: number
+  successes: number
+  cancelled: number
+}
+
+export interface FailureAnalyticsResponse {
+  summary: FailureAnalyticsSummary
+  trend: FailureTrendPoint[]
+}

@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ThemeProvider, BaseStyles, Box, Header, Text } from '@primer/react'
-import { MarkGithubIcon } from '@primer/octicons-react'
+import { ThemeProvider, BaseStyles, Box, Header, Text, UnderlineNav } from '@primer/react'
+import { MarkGithubIcon, GraphIcon, AlertIcon } from '@primer/octicons-react'
 import { MetricsCards } from './components/MetricsCards'
 import { DemandChart } from './components/DemandChart'
 import { WorkflowTable } from './components/WorkflowTable'
+import { FailureAnalytics } from './components/FailureAnalytics'
 import { useSSE } from './hooks/useSSE'
 import { getMetrics, initCsrf } from './api/client'
 import type { MetricsResponse, Period } from './api/types'
 
+type Tab = 'dashboard' | 'failures'
+
 export default function App() {
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [period, setPeriod] = useState<Period>('day')
   const [metricsData, setMetricsData] = useState<MetricsResponse | null>(null)
   const [liveRunning, setLiveRunning] = useState<number | null>(null)
@@ -71,23 +75,48 @@ export default function App() {
           </Header>
 
           <Box sx={{ maxWidth: 1280, mx: 'auto', px: [3, 4], py: 4 }}>
-            <MetricsCards
-              running={running}
-              queued={queued}
-              avgQueueTime={avgQueueTime}
-              peakDemand={peakDemand}
-            />
+            <UnderlineNav aria-label="Main navigation" sx={{ mb: 4 }}>
+              <UnderlineNav.Item
+                aria-current={activeTab === 'dashboard' ? 'page' : undefined}
+                onSelect={() => setActiveTab('dashboard')}
+                icon={GraphIcon}
+              >
+                Dashboard
+              </UnderlineNav.Item>
+              <UnderlineNav.Item
+                aria-current={activeTab === 'failures' ? 'page' : undefined}
+                onSelect={() => setActiveTab('failures')}
+                icon={AlertIcon}
+              >
+                Failure Analytics
+              </UnderlineNav.Item>
+            </UnderlineNav>
 
-            <DemandChart
-              data={metricsData}
-              period={period}
-              onPeriodChange={(p) => {
-                setPeriod(p)
-                loadMetrics(p)
-              }}
-            />
+            {activeTab === 'dashboard' && (
+              <>
+                <MetricsCards
+                  running={running}
+                  queued={queued}
+                  avgQueueTime={avgQueueTime}
+                  peakDemand={peakDemand}
+                />
 
-            <WorkflowTable ready={ready} refreshSignal={workflowRefresh} />
+                <DemandChart
+                  data={metricsData}
+                  period={period}
+                  onPeriodChange={(p) => {
+                    setPeriod(p)
+                    loadMetrics(p)
+                  }}
+                />
+
+                <WorkflowTable ready={ready} refreshSignal={workflowRefresh} />
+              </>
+            )}
+
+            {activeTab === 'failures' && (
+              <FailureAnalytics ready={ready} />
+            )}
           </Box>
         </Box>
       </BaseStyles>
