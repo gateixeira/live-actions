@@ -106,3 +106,8 @@ func (m *MockDatabase) GetLabelDemandTrend(ctx context.Context, since time.Durat
 	args := m.Called(ctx, since)
 	return args.Get(0).([]models.LabelDemandTrendPoint), args.Error(1)
 }
+
+func (m *MockDatabase) GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJobCount, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]LabelJobCount), args.Error(1)
+}

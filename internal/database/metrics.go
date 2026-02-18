@@ -97,3 +97,36 @@ func (d *DBWrapper) GetMetricsSummary(ctx context.Context, since time.Duration) 
 
 	return result, nil
 }
+
+// LabelJobCount holds running/queued counts for a single runner label.
+type LabelJobCount struct {
+	Label   string
+	Running int
+	Queued  int
+}
+
+// GetCurrentJobCountsByLabel returns current running and queued counts grouped by the first label.
+func (d *DBWrapper) GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJobCount, error) {
+	rows, err := d.db.QueryContext(ctx, `
+		SELECT
+			COALESCE(json_extract(labels, '$[0]'), '(unlabeled)') AS label,
+			SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS running,
+			SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued
+		FROM workflow_jobs
+		WHERE status IN ('in_progress', 'queued')
+		GROUP BY label`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get job counts by label: %w", err)
+	}
+	defer rows.Close()
+
+	var counts []LabelJobCount
+	for rows.Next() {
+		var c LabelJobCount
+		if err := rows.Scan(&c.Label, &c.Running, &c.Queued); err != nil {
+			return nil, fmt.Errorf("failed to scan label job count: %w", err)
+		}
+		counts = append(counts, c)
+	}
+	return counts, rows.Err()
+}

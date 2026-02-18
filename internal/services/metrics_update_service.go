@@ -72,6 +72,17 @@ func (s *MetricsUpdateService) updateMetrics() {
 
 	s.registry.UpdateCurrentJobCounts(running, queued)
 
+	// Update per-label gauges
+	labelCounts, err := s.db.GetCurrentJobCountsByLabel(s.ctx)
+	if err != nil {
+		logger.Logger.Error("Failed to get job counts by label", zap.Error(err))
+	} else {
+		s.registry.ResetJobsByLabel()
+		for _, lc := range labelCounts {
+			s.registry.UpdateJobsByLabel(lc.Label, lc.Running, lc.Queued)
+		}
+	}
+
 	// Store a snapshot for historical charts
 	if err := s.db.InsertMetricsSnapshot(s.ctx, running, queued); err != nil {
 		logger.Logger.Error("Failed to insert metrics snapshot", zap.Error(err))

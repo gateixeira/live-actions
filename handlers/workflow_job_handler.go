@@ -133,13 +133,23 @@ func (h *WorkflowJobHandler) handleJobStatusTransition(previousStatus, currentSt
 		zap.String("from", string(previousStatus)),
 		zap.String("to", string(currentStatus)))
 
+	label := "(unlabeled)"
+	if len(job.Labels) > 0 {
+		label = job.Labels[0]
+	}
+
 	// Record queue duration if transitioning from queued
 	if previousStatus == models.JobStatusQueued && !job.StartedAt.IsZero() {
 		queueTime := job.StartedAt.Sub(job.CreatedAt)
-		metricsRegistry.RecordQueueDuration(queueTime.Seconds())
+		metricsRegistry.RecordQueueDuration(label, queueTime.Seconds())
 		logger.Logger.Debug("Queue time recorded",
 			zap.Int64("job_id", job.ID),
 			zap.Duration("queue_time", queueTime))
+	}
+
+	// Record conclusion when job completes
+	if currentStatus == models.JobStatusCompleted && job.Conclusion != "" {
+		metricsRegistry.RecordJobConclusion(job.Conclusion)
 	}
 }
 

@@ -42,6 +42,7 @@ type DatabaseInterface interface {
 	// Label Demand
 	GetLabelDemandSummary(ctx context.Context, since time.Duration) ([]models.LabelDemandSummary, error)
 	GetLabelDemandTrend(ctx context.Context, since time.Duration) ([]models.LabelDemandTrendPoint, error)
+	GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJobCount, error)
 }
 
 // DBWrapper wraps the actual DB instance and implements DatabaseInterface
