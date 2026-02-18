@@ -15,7 +15,7 @@ func (db *DBWrapper) GetLabelDemandSummary(ctx context.Context, since time.Durat
 
 	rows, err := db.db.QueryContext(ctx, `
 		SELECT
-			COALESCE(json_extract(labels, '$[0]'), '(unlabeled)') AS label,
+			json_extract(labels, '$[0]') AS label,
 			COUNT(*) AS total_jobs,
 			SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS running,
 			SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
@@ -25,7 +25,7 @@ func (db *DBWrapper) GetLabelDemandSummary(ctx context.Context, since time.Durat
 				END
 			), 0) AS avg_queue_seconds
 		FROM workflow_jobs
-		WHERE created_at >= ?
+		WHERE created_at >= ? AND json_extract(labels, '$[0]') IS NOT NULL
 		GROUP BY label
 		ORDER BY total_jobs DESC`, cutoff)
 	if err != nil {
@@ -52,7 +52,7 @@ func (db *DBWrapper) GetLabelDemandSummary(ctx context.Context, since time.Durat
 	return results, nil
 }
 
-// GetLabelDemandTrend returns time-bucketed per-label demand counts.
+// GetLabelDemandTrend returns time-bucketed per-label job counts.
 // Uses hourly buckets for periods <= 1 day, daily buckets otherwise.
 func (db *DBWrapper) GetLabelDemandTrend(ctx context.Context, since time.Duration) ([]models.LabelDemandTrendPoint, error) {
 	cutoff := time.Now().Add(-since).Format(time.RFC3339)
@@ -65,11 +65,10 @@ func (db *DBWrapper) GetLabelDemandTrend(ctx context.Context, since time.Duratio
 	rows, err := db.db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT
 			strftime('%s', created_at) AS bucket,
-			COALESCE(json_extract(labels, '$[0]'), '(unlabeled)') AS label,
-			SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS running,
-			SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued
+			json_extract(labels, '$[0]') AS label,
+			COUNT(*) AS count
 		FROM workflow_jobs
-		WHERE created_at >= ?
+		WHERE created_at >= ? AND json_extract(labels, '$[0]') IS NOT NULL
 		GROUP BY bucket, label
 		ORDER BY bucket ASC, label ASC`, bucketFormat), cutoff)
 	if err != nil {
@@ -81,7 +80,7 @@ func (db *DBWrapper) GetLabelDemandTrend(ctx context.Context, since time.Duratio
 	for rows.Next() {
 		var bucketStr string
 		var p models.LabelDemandTrendPoint
-		if err := rows.Scan(&bucketStr, &p.Label, &p.Running, &p.Queued); err != nil {
+		if err := rows.Scan(&bucketStr, &p.Label, &p.Count); err != nil {
 			return nil, fmt.Errorf("failed to scan label demand trend: %w", err)
 		}
 		t, _ := time.Parse("2006-01-02T15:04:05Z", bucketStr)

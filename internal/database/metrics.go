@@ -109,11 +109,11 @@ type LabelJobCount struct {
 func (d *DBWrapper) GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJobCount, error) {
 	rows, err := d.db.QueryContext(ctx, `
 		SELECT
-			COALESCE(json_extract(labels, '$[0]'), '(unlabeled)') AS label,
+			json_extract(labels, '$[0]') AS label,
 			SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS running,
 			SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued
 		FROM workflow_jobs
-		WHERE status IN ('in_progress', 'queued')
+		WHERE status IN ('in_progress', 'queued') AND json_extract(labels, '$[0]') IS NOT NULL
 		GROUP BY label`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get job counts by label: %w", err)

@@ -167,10 +167,9 @@ type LabelDemandSummary struct {
 	AvgQueueSeconds float64 `json:"avg_queue_seconds"`
 }
 
-// LabelDemandTrendPoint represents demand for a single label at a point in time.
+// LabelDemandTrendPoint represents job volume for a single label at a point in time.
 type LabelDemandTrendPoint struct {
 	Timestamp int64  `json:"timestamp"`
 	Label     string `json:"label"`
-	Running   int    `json:"running"`
-	Queued    int    `json:"queued"`
+	Count     int    `json:"count"`
 }

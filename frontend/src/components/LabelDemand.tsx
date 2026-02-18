@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Box, Heading, Text, SegmentedControl } from '@primer/react'
 import {
   ResponsiveContainer,
-  AreaChart,
-  Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -96,18 +96,25 @@ export function LabelDemand({ ready }: Props) {
     return data.summary.map((s) => s.label)
   }, [data])
 
-  // Transform trend data: pivot from [{timestamp, label, running, queued}] to
+  // Transform trend data: pivot from [{timestamp, label, count}] to
   // [{ts, "ubuntu-latest": N, "self-hosted": N, ...}]
+  // Backfill 0 for labels missing from a bucket so recharts draws continuous lines.
   const trendData = useMemo(() => {
-    if (!data?.trend) return []
+    if (!data?.trend || !labels.length) return []
     const map = new Map<number, Record<string, number>>()
     for (const p of data.trend) {
       const existing = map.get(p.timestamp) ?? { ts: p.timestamp }
-      existing[p.label] = (existing[p.label] ?? 0) + p.running + p.queued
+      existing[p.label] = (existing[p.label] ?? 0) + p.count
       map.set(p.timestamp, existing)
     }
-    return Array.from(map.values()).sort((a, b) => a.ts - b.ts)
-  }, [data])
+    const rows = Array.from(map.values())
+    for (const row of rows) {
+      for (const l of labels) {
+        if (!(l in row)) row[l] = 0
+      }
+    }
+    return rows.sort((a, b) => a.ts - b.ts)
+  }, [data, labels])
 
   const selectedIndex = PERIODS.findIndex((p) => p.value === period)
   const summary = data?.summary ?? []
@@ -137,7 +144,7 @@ export function LabelDemand({ ready }: Props) {
       {/* Demand trend chart */}
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Text sx={{ fontSize: 1, fontWeight: 'bold' }}>Demand by Label</Text>
+          <Text sx={{ fontSize: 1, fontWeight: 'bold' }}>Job Volume by Label</Text>
           <SegmentedControl
             aria-label="Time period"
             onChange={(i) => {
@@ -169,7 +176,7 @@ export function LabelDemand({ ready }: Props) {
             </Box>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trendData}>
+              <LineChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                 <XAxis
                   dataKey="ts"
@@ -182,17 +189,16 @@ export function LabelDemand({ ready }: Props) {
                 />
                 <Legend />
                 {labels.map((label, i) => (
-                  <Area
+                  <Line
                     key={label}
                     type="monotone"
                     dataKey={label}
-                    stackId="demand"
-                    fill={LABEL_COLORS[i % LABEL_COLORS.length]}
                     stroke={LABEL_COLORS[i % LABEL_COLORS.length]}
-                    fillOpacity={0.4}
+                    strokeWidth={2}
+                    dot={false}
                   />
                 ))}
-              </AreaChart>
+              </LineChart>
             </ResponsiveContainer>
           )}
         </Box>

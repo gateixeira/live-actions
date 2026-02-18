@@ -128,8 +128,7 @@ export interface LabelDemandSummary {
 export interface LabelDemandTrendPoint {
   timestamp: number
   label: string
-  running: number
-  queued: number
+  count: number
 }
 
 export interface LabelDemandResponse {
