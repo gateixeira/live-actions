@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ThemeProvider, BaseStyles, Box, Header, Text, UnderlineNav } from '@primer/react'
-import { MarkGithubIcon, GraphIcon, AlertIcon } from '@primer/octicons-react'
+import { MarkGithubIcon, GraphIcon, AlertIcon, ServerIcon } from '@primer/octicons-react'
 import { MetricsCards } from './components/MetricsCards'
 import { DemandChart } from './components/DemandChart'
 import { WorkflowTable } from './components/WorkflowTable'
 import { FailureAnalytics } from './components/FailureAnalytics'
+import { LabelDemand } from './components/LabelDemand'
 import { useSSE } from './hooks/useSSE'
 import { getMetrics, initCsrf } from './api/client'
 import type { MetricsResponse, Period } from './api/types'
 
-type Tab = 'dashboard' | 'failures'
+type Tab = 'dashboard' | 'failures' | 'labels'
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
@@ -90,6 +91,13 @@ export default function App() {
               >
                 Failure Analytics
               </UnderlineNav.Item>
+              <UnderlineNav.Item
+                aria-current={activeTab === 'labels' ? 'page' : undefined}
+                onSelect={() => setActiveTab('labels')}
+                icon={ServerIcon}
+              >
+                Runner Labels
+              </UnderlineNav.Item>
             </UnderlineNav>
 
             {activeTab === 'dashboard' && (
@@ -116,6 +124,10 @@ export default function App() {
 
             {activeTab === 'failures' && (
               <FailureAnalytics ready={ready} />
+            )}
+
+            {activeTab === 'labels' && (
+              <LabelDemand ready={ready} />
             )}
           </Box>
         </Box>

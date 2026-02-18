@@ -116,3 +116,23 @@ export interface FailureAnalyticsResponse {
   summary: FailureAnalyticsSummary
   trend: FailureTrendPoint[]
 }
+
+export interface LabelDemandSummary {
+  label: string
+  total_jobs: number
+  running: number
+  queued: number
+  avg_queue_seconds: number
+}
+
+export interface LabelDemandTrendPoint {
+  timestamp: number
+  label: string
+  running: number
+  queued: number
+}
+
+export interface LabelDemandResponse {
+  summary: LabelDemandSummary[]
+  trend: LabelDemandTrendPoint[]
+}

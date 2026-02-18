@@ -8,7 +8,7 @@
 
 > ⚠️ **Beta Software Notice**: Live Actions is currently in beta. While functional and actively developed, expect potential instabilities. Please report issues and provide feedback to help us improve!
 
-Real-time monitoring for GitHub Actions workflows and runners. A single self-contained binary — no external databases, no Prometheus server, no Grafana required.
+Real-time monitoring for GitHub Actions workflows and runners. A single self-contained binary.
 
 ## Overview
 

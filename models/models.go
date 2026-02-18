@@ -157,3 +157,20 @@ type FailureTrendPoint struct {
 	Successes  int   `json:"successes"`
 	Cancelled  int   `json:"cancelled"`
 }
+
+// LabelDemandSummary represents aggregate demand stats for a single runner label.
+type LabelDemandSummary struct {
+	Label           string  `json:"label"`
+	TotalJobs       int     `json:"total_jobs"`
+	Running         int     `json:"running"`
+	Queued          int     `json:"queued"`
+	AvgQueueSeconds float64 `json:"avg_queue_seconds"`
+}
+
+// LabelDemandTrendPoint represents demand for a single label at a point in time.
+type LabelDemandTrendPoint struct {
+	Timestamp int64  `json:"timestamp"`
+	Label     string `json:"label"`
+	Running   int    `json:"running"`
+	Queued    int    `json:"queued"`
+}

@@ -96,3 +96,13 @@ func (m *MockDatabase) GetFailureTrend(ctx context.Context, since time.Duration)
 	args := m.Called(ctx, since)
 	return args.Get(0).([]models.FailureTrendPoint), args.Error(1)
 }
+
+func (m *MockDatabase) GetLabelDemandSummary(ctx context.Context, since time.Duration) ([]models.LabelDemandSummary, error) {
+	args := m.Called(ctx, since)
+	return args.Get(0).([]models.LabelDemandSummary), args.Error(1)
+}
+
+func (m *MockDatabase) GetLabelDemandTrend(ctx context.Context, since time.Duration) ([]models.LabelDemandTrendPoint, error) {
+	args := m.Called(ctx, since)
+	return args.Get(0).([]models.LabelDemandTrendPoint), args.Error(1)
+}

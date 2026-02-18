@@ -3,6 +3,7 @@ import type {
   WorkflowJobsResponse,
   MetricsResponse,
   FailureAnalyticsResponse,
+  LabelDemandResponse,
   Period,
 } from './types'
 
@@ -61,4 +62,10 @@ export async function getFailureAnalytics(
   period: Period,
 ): Promise<FailureAnalyticsResponse> {
   return fetchJson(`/api/analytics/failures?period=${period}`)
+}
+
+export async function getLabelDemand(
+  period: Period,
+): Promise<LabelDemandResponse> {
+  return fetchJson(`/api/analytics/labels?period=${period}`)
 }
