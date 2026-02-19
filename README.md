@@ -30,11 +30,24 @@ Real-time monitoring for GitHub Actions workflows and runners. A single self-con
 
 ![Workflows](images/workflows-v2.png)
 
+#### **🔴 Failure Analytics**
+- Failure rate tracking with total failures, cancellations, and failure percentage
+- Failure trend chart showing failures, successes, and cancellations over time
+- Top failing jobs table ranked by failure count with direct links to GitHub
+
+#### **🏷️ Runner Labels**
+- Per-label demand breakdown showing which runner types (e.g., `ubuntu-latest`, `self-hosted`) have the most demand
+- Job volume chart by label over time to identify demand patterns
+- Label summary table with total jobs, current running/queued counts, and average queue time
+
 #### **⚡ Runner Analytics**
 - Monitor workflow queue times and peak demand periods
 
 #### **📡 Prometheus Metrics**
 - `/metrics` endpoint for integration with existing observability platforms
+- Job conclusions counter (`github_runners_job_conclusions_total`) for failure rate alerting
+- Per-label demand gauges (`github_runners_jobs_by_label`) for runner pool monitoring
+- Per-label queue duration histogram (`github_runners_queue_duration_seconds`) for queue time alerting
 - Compatible with Datadog, New Relic, Splunk, and cloud monitoring services
 
 ## Quick Start
@@ -67,11 +80,11 @@ docker run -p 8080:8080 \
 
 ## Accessing the UI
 
-Once the application is running, open **`http://localhost:8080`** (or your configured port) in a browser. The dashboard has three main sections:
+Once the application is running, open **`http://localhost:8080`** (or your configured port) in a browser. The UI has three tabs:
 
-- **Metrics Cards** — Current running jobs, queued jobs, average queue time, and peak demand at a glance.
-- **Demand Chart** — Historical view of runner demand (running vs queued jobs) with period filters: 1 hour, 1 day, 1 week, or 1 month.
-- **Workflow Runs Table** — Paginated list of recent workflow executions. Click any row to expand and see individual job details, statuses, and links.
+- **Dashboard** — Metrics cards (running, queued, avg queue time, peak demand), historical demand chart with period filters, and a paginated workflow runs table with expandable job details.
+- **Failure Analytics** — Summary cards (total failures, failure rate, cancellations), failure trend chart over time, and a ranked table of top failing jobs with links to GitHub.
+- **Runner Labels** — Current demand cards per active runner label, job volume chart by label over time, and a summary table with per-label totals and average queue times.
 
 The UI updates in real time via Server-Sent Events — no manual refresh needed.
 
@@ -129,6 +142,8 @@ Update your GitHub webhook URL to the ngrok HTTPS URL (e.g., `https://a1b2c3d4.n
 | `GET /metrics` | Prometheus metrics endpoint |
 | `GET /events` | Server-Sent Events for real-time updates |
 | `POST /webhook` | GitHub webhook receiver |
+| `GET /api/analytics/failures?period=` | Failure analytics (hour, day, week, month) |
+| `GET /api/analytics/labels?period=` | Per-label demand breakdown |
 
 ## Architecture
 
@@ -159,6 +174,8 @@ While GitHub offers [Actions Usage Metrics](https://docs.github.com/en/enterpris
 | **Job Status Tracking** | Completed job analysis | **Live job status** (queued → in_progress → completed) |
 | **Update Frequency** | Periodic reporting | **Instant updates** as jobs change state |
 | **Queue Monitoring** | Retrospective queue times | **Real-time queue tracking** and demand spikes |
+| **Failure Analytics** | Basic counts | **Failure rates, trends, and top failing jobs** |
+| **Runner Label Demand** | Not available | **Per-label demand breakdown and queue times** |
 
 ## Limitations
 
