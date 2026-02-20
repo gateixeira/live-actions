@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,10 +52,19 @@ func ValidateGitHubWebhook(config *config.Config) gin.HandlerFunc {
 			signatureHash = signature[7:]
 		}
 
+		// Limit request body size to prevent memory exhaustion (10 MB)
+		const maxBodySize = 10 * 1024 * 1024
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodySize)
+
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
 			logger.Logger.Error("Error reading request body", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read request body"})
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Request body too large"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read request body"})
+			}
 			c.Abort()
 			return
 		}
@@ -172,7 +182,12 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 			return
 		}
 
-		handler := h.handlers[eventTypeStr]
+		handler, exists := h.handlers[eventTypeStr]
+		if !exists {
+			logger.Logger.Warn("No handler registered for event type", zap.String("event_type", eventTypeStr))
+			c.JSON(http.StatusOK, gin.H{"status": "ignored", "message": "Event type not supported"})
+			return
+		}
 		extractedTime, err := handler.ExtractEventTimestamp(jsonData)
 
 		if err != nil {
@@ -255,7 +270,7 @@ func (h *WebhookHandler) processOrderedEvent(event *models.OrderedEvent) error {
 		logger.Logger.Error("Failed to handle event", zap.Error(err),
 			zap.String("event_type", event.EventType),
 			zap.String("delivery_id", event.Sequence.DeliveryID))
-		h.db.MarkEventFailed(context.TODO(), event.Sequence.DeliveryID)
+		_ = h.db.MarkEventFailed(context.TODO(), event.Sequence.DeliveryID)
 		return fmt.Errorf("failed to handle event: %w", err)
 	}
 

@@ -92,6 +92,87 @@ func ValidateOrigin() gin.HandlerFunc {
 	}
 }
 
+// ValidateSSEOrigin middleware validates the origin for SSE connections.
+// EventSource does not support custom headers, so only the Referer/Origin
+// header is checked (no CSRF token requirement).
+//
+// NOTE: Origin/Referer headers can be spoofed by non-browser clients.
+// This middleware provides defense-in-depth against browser-based
+// cross-origin attacks. For stronger protection, consider adding
+// token-based authentication (e.g., signed query-string tokens).
+func ValidateSSEOrigin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Try Origin header first (preferred), then fall back to Referer
+		origin := c.Request.Header.Get("Origin")
+		referer := c.Request.Header.Get("Referer")
+
+		if origin == "" && referer == "" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Access denied. Missing origin.",
+			})
+			c.Abort()
+			return
+		}
+
+		checkURL := origin
+		if checkURL == "" {
+			checkURL = referer
+		}
+
+		parsedURL, err := url.Parse(checkURL)
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Access denied. Invalid origin.",
+			})
+			c.Abort()
+			return
+		}
+
+		// Reject origins that don't contain a host
+		originHost := parsedURL.Host
+		if originHost == "" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Access denied. Origin must contain a host.",
+			})
+			c.Abort()
+			return
+		}
+
+		// Compare full host:port to prevent cross-port attacks.
+		// Normalize by adding default ports when missing.
+		requestHost := c.Request.Host
+		normalizedOriginHost := normalizeHost(parsedURL.Scheme, originHost)
+		normalizedRequestHost := normalizeHost("", requestHost)
+
+		if normalizedOriginHost != normalizedRequestHost {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Access denied. Cross-origin SSE connections are not allowed.",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// normalizeHost ensures a host string has an explicit port by appending
+// the default port for the given scheme when no port is present.
+// For request hosts (scheme=""), it returns the host as-is.
+func normalizeHost(scheme, host string) string {
+	_, _, err := net.SplitHostPort(host)
+	if err != nil {
+		// No port present – add the default for the scheme
+		switch scheme {
+		case "https":
+			return host + ":443"
+		default:
+			return host + ":80"
+		}
+	}
+	return host
+}
+
 // GetWorkflowRuns retrieves the list of workflow runs from the database with pagination support
 func (h *APIHandler) GetWorkflowRuns() gin.HandlerFunc {
 	return func(c *gin.Context) {

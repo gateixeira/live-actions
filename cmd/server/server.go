@@ -37,7 +37,9 @@ func SetupAndRun(staticFS embed.FS) {
 	// Ensure data directory exists for SQLite
 	dbPath := cfg.GetDatabasePath()
 	if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
-		os.MkdirAll(dir, 0700)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			logger.Logger.Error("Failed to create data directory", zap.String("dir", dir), zap.Error(err))
+		}
 	}
 
 	sqlDB, err := database.InitDB(dbPath)
@@ -93,7 +95,7 @@ func SetupAndRun(staticFS embed.FS) {
 	r.GET("/api/metrics/query_range", handlers.ValidateOrigin(), apiHandler.GetCurrentMetrics())
 	r.GET("/api/analytics/failures", handlers.ValidateOrigin(), apiHandler.GetFailureAnalytics())
 	r.GET("/api/analytics/labels", handlers.ValidateOrigin(), apiHandler.GetLabelDemand())
-	r.GET("/events", sseHandler.HandleSSE())
+	r.GET("/events", handlers.ValidateSSEOrigin(), sseHandler.HandleSSE())
 	r.GET("/metrics", metricsHandler.Metrics())
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

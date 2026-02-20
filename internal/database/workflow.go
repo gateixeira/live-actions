@@ -54,12 +54,12 @@ func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.Work
 		WHERE id = ?`, workflowJob.ID).Scan(&isTerminal)
 
 	if err != nil && err != sql.ErrNoRows {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return false, fmt.Errorf("failed to check terminal state: %w", err)
 	}
 
 	if err == nil && isTerminal {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return false, nil
 	}
 
@@ -82,7 +82,7 @@ func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.Work
 	)
 
 	if err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return false, fmt.Errorf("failed to execute upsert: %w", err)
 	}
 
@@ -106,12 +106,12 @@ func (db *DBWrapper) AddOrUpdateRun(ctx context.Context, workflowRun models.Work
 		WHERE id = ?`, workflowRun.ID).Scan(&isTerminal)
 
 	if err != nil && err != sql.ErrNoRows {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return false, fmt.Errorf("failed to check terminal state: %w", err)
 	}
 
 	if err == nil && isTerminal {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return false, nil
 	}
 
@@ -135,7 +135,7 @@ func (db *DBWrapper) AddOrUpdateRun(ctx context.Context, workflowRun models.Work
 	)
 
 	if err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return false, fmt.Errorf("failed to execute upsert: %w", err)
 	}
 
@@ -261,7 +261,7 @@ func (db *DBWrapper) CleanupOldData(ctx context.Context, retentionPeriod time.Du
 	committed := false
 	defer func() {
 		if !committed {
-			tx.Rollback()
+			_ = tx.Rollback()
 		}
 	}()
 

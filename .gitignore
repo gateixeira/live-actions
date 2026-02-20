@@ -6,3 +6,4 @@ live-actions
 cover.*
 coverage.*
 frontend/dist/
+frontend/tsconfig.tsbuildinfo
