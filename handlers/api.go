@@ -95,6 +95,11 @@ func ValidateOrigin() gin.HandlerFunc {
 // ValidateSSEOrigin middleware validates the origin for SSE connections.
 // EventSource does not support custom headers, so only the Referer/Origin
 // header is checked (no CSRF token requirement).
+//
+// NOTE: Origin/Referer headers can be spoofed by non-browser clients.
+// This middleware provides defense-in-depth against browser-based
+// cross-origin attacks. For stronger protection, consider adding
+// token-based authentication (e.g., signed query-string tokens).
 func ValidateSSEOrigin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Try Origin header first (preferred), then fall back to Referer
