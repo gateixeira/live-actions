@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { ThemeProvider, BaseStyles, Box, Header, Text, UnderlineNav, Autocomplete, FormControl } from '@primer/react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { ThemeProvider, BaseStyles, Box, Header, Text, UnderlineNav, FormControl, Select, SelectPanel, Button } from '@primer/react'
 import { MarkGithubIcon, GraphIcon, AlertIcon, ServerIcon } from '@primer/octicons-react'
 import { MetricsCards } from './components/MetricsCards'
 import { DemandChart } from './components/DemandChart'
@@ -8,6 +8,7 @@ import { FailureAnalytics } from './components/FailureAnalytics'
 import { LabelDemand } from './components/LabelDemand'
 import { useSSE } from './hooks/useSSE'
 import { getMetrics, getRepositories, initCsrf } from './api/client'
+import type { SelectPanelItemInput } from '@primer/react'
 import type { MetricsResponse, Period } from './api/types'
 
 type Tab = 'dashboard' | 'failures' | 'labels'
@@ -20,7 +21,19 @@ export default function App() {
   const [liveQueued, setLiveQueued] = useState<number | null>(null)
   const [ready, setReady] = useState(false)
   const [selectedRepo, setSelectedRepo] = useState('')
+  const [selectedStatus, setSelectedStatus] = useState('')
   const [repoItems, setRepoItems] = useState<{ id: string; text: string }[]>([])
+  const [repoPanelOpen, setRepoPanelOpen] = useState(false)
+  const [repoFilter, setRepoFilter] = useState('')
+  const STATUS_OPTIONS = [
+    { id: '', label: 'All statuses' },
+    { id: 'requested', label: 'Requested' },
+    { id: 'in_progress', label: 'In Progress' },
+    { id: 'success', label: 'Success' },
+    { id: 'failure', label: 'Failed' },
+    { id: 'cancelled', label: 'Cancelled' },
+    { id: 'action_required', label: 'Action Required' },
+  ]
 
   // Initialize CSRF token before making API calls
   useEffect(() => {
@@ -70,37 +83,73 @@ export default function App() {
   const avgQueueTime = metricsData?.current_metrics?.avg_queue_time ?? 0
   const peakDemand = metricsData?.current_metrics?.peak_demand ?? 0
 
-  const repoFilter = (
-    <Box sx={{ mb: 3, p: 3, bg: 'canvas.subtle', borderRadius: 2, borderWidth: 1, borderStyle: 'solid', borderColor: 'border.default' }}>
-      <FormControl>
-        <FormControl.Label sx={{ mb: 2 }}>Filter by repository</FormControl.Label>
-        <Autocomplete id="repo-filter">
-          <Autocomplete.Input
-            placeholder="All repositories"
-            value={selectedRepo}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              if (e.target.value === '') setSelectedRepo('')
-            }}
-            sx={{ bg: 'canvas.default', width: '100%' }}
-          />
-          <Autocomplete.Overlay sx={{ zIndex: 100, bg: 'canvas.overlay', borderColor: 'border.default', boxShadow: 'shadow.large' }}>
-            <Autocomplete.Menu
-              items={repoItems}
-              selectedItemIds={selectedRepo ? [selectedRepo] : []}
-              onSelectedChange={(items) => {
-                if (!items) {
-                  setSelectedRepo('')
-                } else if (Array.isArray(items)) {
-                  setSelectedRepo(items.length > 0 ? (items[items.length - 1].text ?? '') : '')
-                } else {
-                  setSelectedRepo(items.text ?? '')
-                }
-              }}
-              selectionVariant="single"
-              aria-labelledby="repo-filter-label"
-            />
-          </Autocomplete.Overlay>
-        </Autocomplete>
+  const filteredRepoItems = useMemo(() => {
+    const allRepos = [{ id: '', text: 'All repositories' }, ...repoItems]
+    if (!repoFilter) return allRepos
+    const lower = repoFilter.toLowerCase()
+    return allRepos.filter((r) => r.text.toLowerCase().includes(lower))
+  }, [repoItems, repoFilter])
+
+  const selectedRepoItem = useMemo(
+    () => (selectedRepo ? { id: selectedRepo, text: selectedRepo } : { id: '', text: 'All repositories' }),
+    [selectedRepo],
+  )
+
+  const repoFilterBox = (
+    <FormControl>
+      <FormControl.Label sx={{ mb: 2 }}>Filter by repository</FormControl.Label>
+      <SelectPanel
+        title="Filter by repository"
+        placeholder="Search repositories..."
+        open={repoPanelOpen}
+        onOpenChange={(open) => {
+          setRepoPanelOpen(open)
+          if (!open) setRepoFilter('')
+        }}
+        items={filteredRepoItems}
+        selected={selectedRepoItem}
+        onSelectedChange={(item: SelectPanelItemInput | undefined) => {
+          if (!item || item.id === '') {
+            setSelectedRepo('')
+          } else {
+            setSelectedRepo(String(item.id))
+          }
+          setRepoPanelOpen(false)
+          setRepoFilter('')
+        }}
+        filterValue={repoFilter}
+        onFilterChange={setRepoFilter}
+        renderAnchor={(props) => (
+          <Button {...props} sx={{ bg: 'canvas.default', '[data-component="text"]': { textAlign: 'left' } }}>
+            {selectedRepo || 'All repositories'}
+          </Button>
+        )}
+        overlayProps={{ width: 'large', sx: { bg: 'canvas.overlay', color: 'fg.default' } }}
+        height="medium"
+      />
+    </FormControl>
+  )
+
+  const repoOnlyFilter = (
+    <Box sx={{ mb: 3, p: 3, bg: 'canvas.default', borderRadius: 2, borderWidth: 1, borderStyle: 'solid', borderColor: 'border.default' }}>
+      {repoFilterBox}
+    </Box>
+  )
+
+  const dashboardFilter = (
+    <Box sx={{ mb: 3, p: 3, bg: 'canvas.default', borderRadius: 2, borderWidth: 1, borderStyle: 'solid', borderColor: 'border.default', display: 'flex', gap: 4, alignItems: 'flex-end' }}>
+      {repoFilterBox}
+      <FormControl sx={{ flex: 1 }}>
+        <FormControl.Label sx={{ mb: 2 }}>Filter by status</FormControl.Label>
+        <Select
+          value={selectedStatus}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedStatus(e.target.value)}
+          sx={{ bg: 'canvas.default' }}
+        >
+          {STATUS_OPTIONS.map((opt) => (
+            <Select.Option key={opt.id} value={opt.id}>{opt.label}</Select.Option>
+          ))}
+        </Select>
       </FormControl>
     </Box>
   )
@@ -108,7 +157,7 @@ export default function App() {
   return (
     <ThemeProvider colorMode="auto">
       <BaseStyles>
-        <Box sx={{ minHeight: '100vh', bg: 'canvas.default', color: 'fg.default' }}>
+        <Box sx={{ minHeight: '100vh', bg: 'canvas.inset', color: 'fg.default' }}>
           <Header>
             <Header.Item>
               <Header.Link href="/" sx={{ fontSize: 2, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -165,21 +214,21 @@ export default function App() {
                   }}
                 />
 
-                {repoFilter}
-                <WorkflowTable ready={ready} refreshSignal={workflowRefresh} repo={selectedRepo} />
+                {dashboardFilter}
+                <WorkflowTable key={`${selectedRepo}:${selectedStatus}`} ready={ready} refreshSignal={workflowRefresh} repo={selectedRepo} status={selectedStatus} />
               </>
             )}
 
             {activeTab === 'failures' && (
               <>
-                {repoFilter}
+                {repoOnlyFilter}
                 <FailureAnalytics ready={ready} repo={selectedRepo} />
               </>
             )}
 
             {activeTab === 'labels' && (
               <>
-                {repoFilter}
+                {repoOnlyFilter}
                 <LabelDemand ready={ready} repo={selectedRepo} />
               </>
             )}

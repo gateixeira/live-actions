@@ -58,7 +58,7 @@ function Card({ label, value, sub }: { label: string; value: React.ReactNode; su
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'border.default',
-        bg: 'canvas.subtle',
+        bg: 'canvas.default',
         minWidth: 160,
         flex: '1 1 200px',
       }}
@@ -168,7 +168,7 @@ export function LabelDemand({ ready, repo }: Props) {
             borderColor: 'border.default',
             borderRadius: 2,
             p: 3,
-            bg: 'canvas.subtle',
+            bg: 'canvas.default',
           }}
         >
           {trendData.length === 0 ? (
@@ -214,6 +214,7 @@ export function LabelDemand({ ready, repo }: Props) {
             borderColor: 'border.default',
             borderRadius: 2,
             overflow: 'hidden',
+            bg: 'canvas.default',
           }}
         >
           <Box

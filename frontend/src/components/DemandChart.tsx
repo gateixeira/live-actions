@@ -84,7 +84,7 @@ export function DemandChart({ data, period, onPeriodChange }: Props) {
           borderColor: 'border.default',
           borderRadius: 2,
           p: 3,
-          bg: 'canvas.subtle',
+          bg: 'canvas.default',
         }}
       >
         {chartData.length === 0 ? (

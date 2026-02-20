@@ -12,7 +12,7 @@ type MockDatabase struct {
 	mock.Mock
 }
 
-func (m *MockDatabase) GetWorkflowRunsPaginated(ctx context.Context, page int, limit int, repo string) ([]models.WorkflowRun, int, error) {
+func (m *MockDatabase) GetWorkflowRunsPaginated(ctx context.Context, page int, limit int, repo string, status string) ([]models.WorkflowRun, int, error) {
 	args := m.Called(ctx, page, limit, repo)
 	return args.Get(0).([]models.WorkflowRun), args.Int(1), args.Error(2)
 }

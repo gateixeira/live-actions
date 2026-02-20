@@ -27,7 +27,7 @@ function Card({ label, value }: { label: string; value: React.ReactNode; variant
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'border.default',
-        bg: 'canvas.subtle',
+        bg: 'canvas.default',
         flex: 1,
         minWidth: 160,
       }}

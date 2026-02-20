@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Box, Text, Label, Spinner, RelativeTime, Link } from '@primer/react'
+import { Box, Text, Label, Spinner, RelativeTime, Link, SegmentedControl, IconButton } from '@primer/react'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -8,8 +8,9 @@ import {
   ClockIcon,
   SkipFillIcon,
   HourglassIcon,
+  AlertIcon,
 } from '@primer/octicons-react'
-import type { WorkflowRun, WorkflowJob, Pagination } from '../api/types'
+import type { WorkflowRun, WorkflowJob, Pagination as PaginationData } from '../api/types'
 import { getWorkflowRuns, getWorkflowJobs } from '../api/client'
 
 const MAX_TEXT_LEN = 50
@@ -28,6 +29,7 @@ function StatusBadge({ status, conclusion }: { status: string; conclusion?: stri
     skipped: { color: 'fg.muted', icon: <SkipFillIcon size={14} />, text: 'Skipped' },
     requested: { color: 'attention.fg', icon: <ClockIcon size={14} />, text: 'Requested' },
     waiting: { color: 'attention.fg', icon: <ClockIcon size={14} />, text: 'Waiting' },
+    action_required: { color: 'attention.fg', icon: <AlertIcon size={14} />, text: 'Action Required' },
   }
   const s = map[effective] ?? { color: 'fg.muted', icon: <ClockIcon size={14} />, text: effective }
 
@@ -184,22 +186,34 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
   )
 }
 
-export function WorkflowTable({ ready, refreshSignal, repo }: { ready: boolean; refreshSignal: number; repo: string }) {
+function pageRange(current: number, total: number): (number | '...')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | '...')[] = [1]
+  const start = Math.max(2, current - 1)
+  const end = Math.min(total - 1, current + 1)
+  if (start > 2) pages.push('...')
+  for (let i = start; i <= end; i++) pages.push(i)
+  if (end < total - 1) pages.push('...')
+  pages.push(total)
+  return pages
+}
+
+export function WorkflowTable({ ready, refreshSignal, repo, status }: { ready: boolean; refreshSignal: number; repo: string; status: string }) {
   const [runs, setRuns] = useState<WorkflowRun[]>([])
-  const [pagination, setPagination] = useState<Pagination | null>(null)
+  const [pagination, setPagination] = useState<PaginationData | null>(null)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(() => {
     setLoading(true)
-    getWorkflowRuns(page, 15, repo)
+    getWorkflowRuns(page, 15, repo, status)
       .then((r) => {
         setRuns(r.workflow_runs ?? [])
         setPagination(r.pagination)
       })
       .catch((err) => { console.error('Failed to load workflow runs', err); setRuns([]) })
       .finally(() => setLoading(false))
-  }, [page, repo])
+  }, [page, repo, status])
 
   useEffect(() => {
     if (!ready) return
@@ -209,11 +223,25 @@ export function WorkflowTable({ ready, refreshSignal, repo }: { ready: boolean; 
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Text sx={{ fontSize: 1, fontWeight: 'bold' }}>Recent Workflow Runs</Text>
-        {pagination && (
-          <Text sx={{ fontSize: 0, color: 'fg.muted' }}>
-            Page {pagination.current_page} of {pagination.total_pages} ({pagination.total_count} total)
-          </Text>
+        <Text sx={{ fontSize: 1, fontWeight: 'bold' }}>
+          Recent Workflow Runs{pagination ? ` (${pagination.total_count} runs)` : ''}
+        </Text>
+        {pagination && pagination.total_pages > 1 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <IconButton aria-label="First page" icon={() => <span>«</span>} size="small" variant="invisible" disabled={page === 1} onClick={() => setPage(1)} />
+            <SegmentedControl aria-label="Page" size="small" onChange={(i) => {
+              const pages = pageRange(page, pagination.total_pages)
+              const selected = pages[i]
+              if (typeof selected === 'number') setPage(selected)
+            }}>
+              {pageRange(page, pagination.total_pages).map((p, i) => (
+                <SegmentedControl.Button key={`${p}-${i}`} selected={p === page} disabled={p === '...'}>
+                  {p === '...' ? '…' : String(p)}
+                </SegmentedControl.Button>
+              ))}
+            </SegmentedControl>
+            <IconButton aria-label="Last page" icon={() => <span>»</span>} size="small" variant="invisible" disabled={page === pagination.total_pages} onClick={() => setPage(pagination.total_pages)} />
+          </Box>
         )}
       </Box>
 
@@ -223,6 +251,7 @@ export function WorkflowTable({ ready, refreshSignal, repo }: { ready: boolean; 
           borderColor: 'border.default',
           borderRadius: 2,
           overflow: 'hidden',
+          bg: 'canvas.default',
         }}
       >
         <Box
@@ -260,51 +289,6 @@ export function WorkflowTable({ ready, refreshSignal, repo }: { ready: boolean; 
           </Box>
         </Box>
       </Box>
-
-      {pagination && pagination.total_pages > 1 && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 3 }}>
-          <Box
-            as="button"
-            sx={{
-              px: 3,
-              py: 1,
-              fontSize: 0,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'border.default',
-              bg: 'canvas.default',
-              color: 'fg.default',
-              cursor: pagination.has_previous ? 'pointer' : 'not-allowed',
-              opacity: pagination.has_previous ? 1 : 0.5,
-              '&:hover': pagination.has_previous ? { bg: 'canvas.subtle' } : {},
-            }}
-            onClick={() => pagination.has_previous && setPage((p) => p - 1)}
-            disabled={!pagination.has_previous}
-          >
-            Previous
-          </Box>
-          <Box
-            as="button"
-            sx={{
-              px: 3,
-              py: 1,
-              fontSize: 0,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'border.default',
-              bg: 'canvas.default',
-              color: 'fg.default',
-              cursor: pagination.has_next ? 'pointer' : 'not-allowed',
-              opacity: pagination.has_next ? 1 : 0.5,
-              '&:hover': pagination.has_next ? { bg: 'canvas.subtle' } : {},
-            }}
-            onClick={() => pagination.has_next && setPage((p) => p + 1)}
-            disabled={!pagination.has_next}
-          >
-            Next
-          </Box>
-        </Box>
-      )}
     </Box>
   )
 }

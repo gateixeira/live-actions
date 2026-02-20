@@ -148,35 +148,41 @@ func (db *DBWrapper) AddOrUpdateRun(ctx context.Context, workflowRun models.Work
 
 // GetWorkflowRunsPaginated retrieves workflow runs with pagination support.
 // If repo is non-empty, results are filtered to that repository.
-func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, limit int, repo string) ([]models.WorkflowRun, int, error) {
+// If status is non-empty, results are filtered to that status/conclusion.
+func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, limit int, repo string, status string) ([]models.WorkflowRun, int, error) {
 	offset := (page - 1) * limit
 
-	var totalCount int
+	where := "WHERE 1=1"
+	var args []interface{}
 	if repo != "" {
-		err := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs WHERE repository = ?", repo).Scan(&totalCount)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				return []models.WorkflowRun{}, 0, nil
-			}
-			return nil, 0, err
-		}
-	} else {
-		err := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs").Scan(&totalCount)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				return []models.WorkflowRun{}, 0, nil
-			}
-			return nil, 0, err
+		where += " AND repository = ?"
+		args = append(args, repo)
+	}
+	if status != "" {
+		// "completed" is a status; "success", "failure", "cancelled" are conclusions
+		switch status {
+		case "requested", "in_progress", "completed":
+			where += " AND status = ?"
+			args = append(args, status)
+		case "success", "failure", "cancelled", "action_required":
+			where += " AND conclusion = ?"
+			args = append(args, status)
 		}
 	}
 
-	var rows *sql.Rows
-	var err error
-	if repo != "" {
-		rows, err = db.db.QueryContext(ctx, "SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs WHERE repository = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", repo, limit, offset)
-	} else {
-		rows, err = db.db.QueryContext(ctx, "SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs ORDER BY created_at DESC LIMIT ? OFFSET ?", limit, offset)
+	var totalCount int
+	err := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs "+where, args...).Scan(&totalCount)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return []models.WorkflowRun{}, 0, nil
+		}
+		return nil, 0, err
 	}
+
+	queryArgs := append(args, limit, offset)
+	rows, err := db.db.QueryContext(ctx,
+		"SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs "+where+" ORDER BY created_at DESC LIMIT ? OFFSET ?",
+		queryArgs...)
 	if err != nil {
 		return nil, 0, err
 	}

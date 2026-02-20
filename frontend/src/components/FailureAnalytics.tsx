@@ -40,7 +40,7 @@ function Card({ label, value, color }: { label: string; value: React.ReactNode; 
         borderRadius: 2,
         border: '1px solid',
         borderColor: 'border.default',
-        bg: 'canvas.subtle',
+        bg: 'canvas.default',
         flex: 1,
         minWidth: 160,
       }}
@@ -130,7 +130,7 @@ export function FailureAnalytics({ ready, repo }: Props) {
             borderColor: 'border.default',
             borderRadius: 2,
             p: 3,
-            bg: 'canvas.subtle',
+            bg: 'canvas.default',
           }}
         >
           {trendData.length === 0 ? (
@@ -169,6 +169,7 @@ export function FailureAnalytics({ ready, repo }: Props) {
             borderColor: 'border.default',
             borderRadius: 2,
             overflow: 'hidden',
+            bg: 'canvas.default',
           }}
         >
           <Box

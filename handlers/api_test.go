@@ -265,7 +265,7 @@ func TestGetWorkflowRuns_Success(t *testing.T) {
 		},
 	}
 
-	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25, mock.Anything).Return(expectedRuns, 1, nil)
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25, mock.Anything, mock.Anything).Return(expectedRuns, 1, nil)
 
 	router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 
@@ -298,7 +298,7 @@ func TestGetWorkflowRuns_WithPagination(t *testing.T) {
 	handler := NewAPIHandler(testConfig, mockDB)
 
 	expectedRuns := []models.WorkflowRun{}
-	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 2, 10, mock.Anything).Return(expectedRuns, 50, nil)
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 2, 10, mock.Anything, mock.Anything).Return(expectedRuns, 50, nil)
 
 	router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 
@@ -329,7 +329,7 @@ func TestGetWorkflowRuns_InvalidPagination(t *testing.T) {
 
 	// Should default to page=1, limit=25 for invalid values
 	expectedRuns := []models.WorkflowRun{}
-	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25, mock.Anything).Return(expectedRuns, 0, nil)
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25, mock.Anything, mock.Anything).Return(expectedRuns, 0, nil)
 
 	router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 
@@ -354,7 +354,7 @@ func TestGetWorkflowRuns_DatabaseError(t *testing.T) {
 	router, mockDB, testConfig := setupAPITest()
 	handler := NewAPIHandler(testConfig, mockDB)
 
-	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25, mock.Anything).Return([]models.WorkflowRun{}, 0, errors.New("database error"))
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25, mock.Anything, mock.Anything).Return([]models.WorkflowRun{}, 0, errors.New("database error"))
 
 	router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 
@@ -505,7 +505,7 @@ func TestIntegration_ValidateOriginWithGetWorkflowRuns(t *testing.T) {
 
 	// Mock successful database call
 	expectedRuns := []models.WorkflowRun{}
-	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25, mock.Anything).Return(expectedRuns, 0, nil)
+	mockDB.On("GetWorkflowRunsPaginated", mock.Anything, 1, 25, mock.Anything, mock.Anything).Return(expectedRuns, 0, nil)
 
 	// Test with valid CSRF and referer
 	w := httptest.NewRecorder()
@@ -584,7 +584,7 @@ func TestGetWorkflowRuns_PaginationEdgeCases(t *testing.T) {
 			handler := NewAPIHandler(testConfig, mockDB)
 
 			expectedRuns := []models.WorkflowRun{}
-			mockDB.On("GetWorkflowRunsPaginated", mock.Anything, tc.expectedPage, tc.expectedLimit, mock.Anything).Return(expectedRuns, 0, nil)
+			mockDB.On("GetWorkflowRunsPaginated", mock.Anything, tc.expectedPage, tc.expectedLimit, mock.Anything, mock.Anything).Return(expectedRuns, 0, nil)
 
 			router.GET("/api/workflow-runs", handler.GetWorkflowRuns())
 

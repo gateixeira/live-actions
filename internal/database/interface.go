@@ -18,7 +18,7 @@ type DatabaseInterface interface {
 
 	// Workflow Runs
 	AddOrUpdateRun(ctx context.Context, workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error)
-	GetWorkflowRunsPaginated(ctx context.Context, page int, limit int, repo string) ([]models.WorkflowRun, int, error)
+	GetWorkflowRunsPaginated(ctx context.Context, page int, limit int, repo string, status string) ([]models.WorkflowRun, int, error)
 
 	// Metrics Snapshots
 	InsertMetricsSnapshot(ctx context.Context, running, queued int) error

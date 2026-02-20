@@ -178,9 +178,10 @@ func (h *APIHandler) GetWorkflowRuns() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		page, limit := GetPaginationParams(c)
 		repo := c.Query("repo")
+		status := c.Query("status")
 
 		// Retrieve workflow runs from the database with pagination
-		runs, totalCount, err := h.db.GetWorkflowRunsPaginated(c.Request.Context(), page, limit, repo)
+		runs, totalCount, err := h.db.GetWorkflowRunsPaginated(c.Request.Context(), page, limit, repo, status)
 		if err != nil {
 			logger.Logger.Error("Error retrieving workflow runs", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve workflow runs"})

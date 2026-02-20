@@ -65,8 +65,10 @@ export async function getWorkflowRuns(
   page = 1,
   limit = 25,
   repo = '',
+  status = '',
 ): Promise<WorkflowRunsResponse> {
-  return fetchJson(`/api/workflow-runs?page=${page}&limit=${limit}${repoParam(repo)}`)
+  const statusParam = status ? `&status=${encodeURIComponent(status)}` : ''
+  return fetchJson(`/api/workflow-runs?page=${page}&limit=${limit}${repoParam(repo)}${statusParam}`)
 }
 
 export async function getWorkflowJobs(
