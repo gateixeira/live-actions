@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Box, Heading, Text, SegmentedControl, Label } from '@primer/react'
+import { Box, Text, SegmentedControl, Label } from '@primer/react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -11,46 +11,13 @@ import {
   CartesianGrid,
 } from 'recharts'
 import { getFailureAnalytics } from '../api/client'
+import { Card } from './Card'
+import { PERIODS, formatTime } from '../utils/format'
 import type { FailureAnalyticsResponse, Period } from '../api/types'
 
 interface Props {
   ready: boolean
   repo: string
-}
-
-const PERIODS: { label: string; value: Period }[] = [
-  { label: '1h', value: 'hour' },
-  { label: '1d', value: 'day' },
-  { label: '1w', value: 'week' },
-  { label: '1m', value: 'month' },
-]
-
-function formatTime(ts: number, period: Period): string {
-  const d = new Date(ts * 1000)
-  if (period === 'hour' || period === 'day')
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
-}
-
-function Card({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
-  return (
-    <Box
-      sx={{
-        p: 3,
-        borderRadius: 2,
-        border: '1px solid',
-        borderColor: 'border.default',
-        bg: 'canvas.default',
-        flex: 1,
-        minWidth: 160,
-      }}
-    >
-      <Text sx={{ fontSize: 0, color: 'fg.muted', display: 'block', mb: 1 }}>{label}</Text>
-      <Heading as="h3" sx={{ fontSize: 4, fontWeight: 'bold', color: color || 'fg.default' }}>
-        {value}
-      </Heading>
-    </Box>
-  )
 }
 
 export function FailureAnalytics({ ready, repo }: Props) {

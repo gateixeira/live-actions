@@ -11,25 +11,12 @@ import {
   CartesianGrid,
 } from 'recharts'
 import type { MetricsResponse, Period } from '../api/types'
+import { PERIODS, formatTime } from '../utils/format'
 
 interface Props {
   data: MetricsResponse | null
   period: Period
   onPeriodChange: (p: Period) => void
-}
-
-const PERIODS: { label: string; value: Period }[] = [
-  { label: '1h', value: 'hour' },
-  { label: '1d', value: 'day' },
-  { label: '1w', value: 'week' },
-  { label: '1m', value: 'month' },
-]
-
-function formatTime(ts: number, period: Period): string {
-  const d = new Date(ts * 1000)
-  if (period === 'hour') return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  if (period === 'day') return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
 export function DemandChart({ data, period, onPeriodChange }: Props) {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Box, Heading, Text, SegmentedControl } from '@primer/react'
+import { Box, Text, SegmentedControl } from '@primer/react'
 import {
   ResponsiveContainer,
   LineChart,
@@ -11,6 +11,8 @@ import {
   CartesianGrid,
 } from 'recharts'
 import { getLabelDemand } from '../api/client'
+import { Card } from './Card'
+import { PERIODS, formatTime, formatSeconds } from '../utils/format'
 import type { LabelDemandResponse, Period } from '../api/types'
 
 interface Props {
@@ -18,61 +20,11 @@ interface Props {
   repo: string
 }
 
-const PERIODS: { label: string; value: Period }[] = [
-  { label: '1h', value: 'hour' },
-  { label: '1d', value: 'day' },
-  { label: '1w', value: 'week' },
-  { label: '1m', value: 'month' },
-]
-
 // Distinct colors for up to 10 labels
 const LABEL_COLORS = [
   '#2da44e', '#0969da', '#bf8700', '#cf222e', '#8250df',
   '#1a7f37', '#0550ae', '#953800', '#a40e26', '#6639ba',
 ]
-
-function formatTime(ts: number, period: Period): string {
-  const d = new Date(ts * 1000)
-  if (period === 'hour' || period === 'day')
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
-}
-
-function formatSeconds(s: number): string {
-  if (!s || s === 0) return '0s'
-  const total = Math.round(s)
-  if (total < 60) return `${total}s`
-  const m = Math.floor(total / 60)
-  const rem = total % 60
-  if (m < 60) return rem > 0 ? `${m}m ${rem}s` : `${m}m`
-  const h = Math.floor(m / 60)
-  const rm = m % 60
-  return rm > 0 ? `${h}h ${rm}m` : `${h}h`
-}
-
-function Card({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
-  return (
-    <Box
-      sx={{
-        p: 3,
-        borderRadius: 2,
-        border: '1px solid',
-        borderColor: 'border.default',
-        bg: 'canvas.default',
-        minWidth: 160,
-        flex: '1 1 200px',
-      }}
-    >
-      <Text sx={{ fontSize: 0, color: 'fg.muted', display: 'block', mb: 1 }}>{label}</Text>
-      <Heading as="h3" sx={{ fontSize: 4, fontWeight: 'bold' }}>
-        {value}
-      </Heading>
-      {sub && (
-        <Text sx={{ fontSize: 0, color: 'fg.muted', display: 'block', mt: 1 }}>{sub}</Text>
-      )}
-    </Box>
-  )
-}
 
 export function LabelDemand({ ready, repo }: Props) {
   const [period, setPeriod] = useState<Period>('day')
