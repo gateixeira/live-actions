@@ -12,8 +12,8 @@ type MockDatabase struct {
 	mock.Mock
 }
 
-func (m *MockDatabase) GetWorkflowRunsPaginated(ctx context.Context, page int, limit int) ([]models.WorkflowRun, int, error) {
-	args := m.Called(ctx, page, limit)
+func (m *MockDatabase) GetWorkflowRunsPaginated(ctx context.Context, page int, limit int, repo string) ([]models.WorkflowRun, int, error) {
+	args := m.Called(ctx, page, limit, repo)
 	return args.Get(0).([]models.WorkflowRun), args.Int(1), args.Error(2)
 }
 
@@ -87,27 +87,32 @@ func (m *MockDatabase) GetMetricsSummary(ctx context.Context, since time.Duratio
 	return args.Get(0).(map[string]float64), args.Error(1)
 }
 
-func (m *MockDatabase) GetFailureAnalytics(ctx context.Context, since time.Duration) (*models.FailureAnalytics, error) {
-	args := m.Called(ctx, since)
+func (m *MockDatabase) GetFailureAnalytics(ctx context.Context, since time.Duration, repo string) (*models.FailureAnalytics, error) {
+	args := m.Called(ctx, since, repo)
 	return args.Get(0).(*models.FailureAnalytics), args.Error(1)
 }
 
-func (m *MockDatabase) GetFailureTrend(ctx context.Context, since time.Duration) ([]models.FailureTrendPoint, error) {
-	args := m.Called(ctx, since)
+func (m *MockDatabase) GetFailureTrend(ctx context.Context, since time.Duration, repo string) ([]models.FailureTrendPoint, error) {
+	args := m.Called(ctx, since, repo)
 	return args.Get(0).([]models.FailureTrendPoint), args.Error(1)
 }
 
-func (m *MockDatabase) GetLabelDemandSummary(ctx context.Context, since time.Duration) ([]models.LabelDemandSummary, error) {
-	args := m.Called(ctx, since)
+func (m *MockDatabase) GetLabelDemandSummary(ctx context.Context, since time.Duration, repo string) ([]models.LabelDemandSummary, error) {
+	args := m.Called(ctx, since, repo)
 	return args.Get(0).([]models.LabelDemandSummary), args.Error(1)
 }
 
-func (m *MockDatabase) GetLabelDemandTrend(ctx context.Context, since time.Duration) ([]models.LabelDemandTrendPoint, error) {
-	args := m.Called(ctx, since)
+func (m *MockDatabase) GetLabelDemandTrend(ctx context.Context, since time.Duration, repo string) ([]models.LabelDemandTrendPoint, error) {
+	args := m.Called(ctx, since, repo)
 	return args.Get(0).([]models.LabelDemandTrendPoint), args.Error(1)
 }
 
 func (m *MockDatabase) GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJobCount, error) {
 	args := m.Called(ctx)
 	return args.Get(0).([]LabelJobCount), args.Error(1)
+}
+
+func (m *MockDatabase) GetRepositories(ctx context.Context) ([]string, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]string), args.Error(1)
 }

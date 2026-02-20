@@ -146,20 +146,37 @@ func (db *DBWrapper) AddOrUpdateRun(ctx context.Context, workflowRun models.Work
 	return true, nil
 }
 
-// GetWorkflowRunsPaginated retrieves workflow runs with pagination support
-func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, limit int) ([]models.WorkflowRun, int, error) {
+// GetWorkflowRunsPaginated retrieves workflow runs with pagination support.
+// If repo is non-empty, results are filtered to that repository.
+func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, limit int, repo string) ([]models.WorkflowRun, int, error) {
 	offset := (page - 1) * limit
 
 	var totalCount int
-	err := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs").Scan(&totalCount)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return []models.WorkflowRun{}, 0, nil
+	if repo != "" {
+		err := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs WHERE repository = ?", repo).Scan(&totalCount)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return []models.WorkflowRun{}, 0, nil
+			}
+			return nil, 0, err
 		}
-		return nil, 0, err
+	} else {
+		err := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs").Scan(&totalCount)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return []models.WorkflowRun{}, 0, nil
+			}
+			return nil, 0, err
+		}
 	}
 
-	rows, err := db.db.QueryContext(ctx, "SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs ORDER BY created_at DESC LIMIT ? OFFSET ?", limit, offset)
+	var rows *sql.Rows
+	var err error
+	if repo != "" {
+		rows, err = db.db.QueryContext(ctx, "SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs WHERE repository = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", repo, limit, offset)
+	} else {
+		rows, err = db.db.QueryContext(ctx, "SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs ORDER BY created_at DESC LIMIT ? OFFSET ?", limit, offset)
+	}
 	if err != nil {
 		return nil, 0, err
 	}
@@ -183,6 +200,32 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, lim
 	}
 
 	return runs, totalCount, nil
+}
+
+// GetRepositories returns the distinct list of repository names.
+func (db *DBWrapper) GetRepositories(ctx context.Context) ([]string, error) {
+	rows, err := db.db.QueryContext(ctx,
+		"SELECT DISTINCT repository FROM workflow_runs WHERE repository != '' ORDER BY repository ASC")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repositories: %w", err)
+	}
+	defer rows.Close()
+
+	var repos []string
+	for rows.Next() {
+		var repo string
+		if err := rows.Scan(&repo); err != nil {
+			return nil, fmt.Errorf("failed to scan repository: %w", err)
+		}
+		repos = append(repos, repo)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if repos == nil {
+		repos = []string{}
+	}
+	return repos, nil
 }
 
 func (db *DBWrapper) GetWorkflowJobsByRunID(ctx context.Context, runID int64) ([]models.WorkflowJob, error) {

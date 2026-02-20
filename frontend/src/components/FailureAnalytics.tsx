@@ -15,6 +15,7 @@ import type { FailureAnalyticsResponse, Period } from '../api/types'
 
 interface Props {
   ready: boolean
+  repo: string
 }
 
 const PERIODS: { label: string; value: Period }[] = [
@@ -52,17 +53,17 @@ function Card({ label, value, color }: { label: string; value: React.ReactNode; 
   )
 }
 
-export function FailureAnalytics({ ready }: Props) {
+export function FailureAnalytics({ ready, repo }: Props) {
   const [period, setPeriod] = useState<Period>('day')
   const [data, setData] = useState<FailureAnalyticsResponse | null>(null)
 
   const load = useCallback(
     (p: Period) => {
-      getFailureAnalytics(p)
+      getFailureAnalytics(p, repo)
         .then(setData)
         .catch((err) => console.error('Failed to load failure analytics', err))
     },
-    [],
+    [repo],
   )
 
   useEffect(() => {

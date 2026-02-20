@@ -18,7 +18,7 @@ type DatabaseInterface interface {
 
 	// Workflow Runs
 	AddOrUpdateRun(ctx context.Context, workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error)
-	GetWorkflowRunsPaginated(ctx context.Context, page int, limit int) ([]models.WorkflowRun, int, error)
+	GetWorkflowRunsPaginated(ctx context.Context, page int, limit int, repo string) ([]models.WorkflowRun, int, error)
 
 	// Metrics Snapshots
 	InsertMetricsSnapshot(ctx context.Context, running, queued int) error
@@ -35,13 +35,16 @@ type DatabaseInterface interface {
 	// Cleanup
 	CleanupOldData(ctx context.Context, retentionPeriod time.Duration) (int64, int64, int64, error)
 
+	// Repositories
+	GetRepositories(ctx context.Context) ([]string, error)
+
 	// Failure Analytics
-	GetFailureAnalytics(ctx context.Context, since time.Duration) (*models.FailureAnalytics, error)
-	GetFailureTrend(ctx context.Context, since time.Duration) ([]models.FailureTrendPoint, error)
+	GetFailureAnalytics(ctx context.Context, since time.Duration, repo string) (*models.FailureAnalytics, error)
+	GetFailureTrend(ctx context.Context, since time.Duration, repo string) ([]models.FailureTrendPoint, error)
 
 	// Label Demand
-	GetLabelDemandSummary(ctx context.Context, since time.Duration) ([]models.LabelDemandSummary, error)
-	GetLabelDemandTrend(ctx context.Context, since time.Duration) ([]models.LabelDemandTrendPoint, error)
+	GetLabelDemandSummary(ctx context.Context, since time.Duration, repo string) ([]models.LabelDemandSummary, error)
+	GetLabelDemandTrend(ctx context.Context, since time.Duration, repo string) ([]models.LabelDemandTrendPoint, error)
 	GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJobCount, error)
 }
 

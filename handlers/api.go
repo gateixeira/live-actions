@@ -177,9 +177,10 @@ func normalizeHost(scheme, host string) string {
 func (h *APIHandler) GetWorkflowRuns() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		page, limit := GetPaginationParams(c)
+		repo := c.Query("repo")
 
 		// Retrieve workflow runs from the database with pagination
-		runs, totalCount, err := h.db.GetWorkflowRunsPaginated(c.Request.Context(), page, limit)
+		runs, totalCount, err := h.db.GetWorkflowRunsPaginated(c.Request.Context(), page, limit, repo)
 		if err != nil {
 			logger.Logger.Error("Error retrieving workflow runs", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve workflow runs"})
@@ -313,15 +314,16 @@ func (h *APIHandler) GetFailureAnalytics() gin.HandlerFunc {
 		period := c.DefaultQuery("period", "day")
 		since := periodToDuration(period)
 		ctx := c.Request.Context()
+		repo := c.Query("repo")
 
-		summary, err := h.db.GetFailureAnalytics(ctx, since)
+		summary, err := h.db.GetFailureAnalytics(ctx, since, repo)
 		if err != nil {
 			logger.Logger.Error("Failed to get failure analytics", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve failure analytics"})
 			return
 		}
 
-		trend, err := h.db.GetFailureTrend(ctx, since)
+		trend, err := h.db.GetFailureTrend(ctx, since, repo)
 		if err != nil {
 			logger.Logger.Error("Failed to get failure trend", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve failure trend"})
@@ -341,15 +343,16 @@ func (h *APIHandler) GetLabelDemand() gin.HandlerFunc {
 		period := c.DefaultQuery("period", "day")
 		since := periodToDuration(period)
 		ctx := c.Request.Context()
+		repo := c.Query("repo")
 
-		summary, err := h.db.GetLabelDemandSummary(ctx, since)
+		summary, err := h.db.GetLabelDemandSummary(ctx, since, repo)
 		if err != nil {
 			logger.Logger.Error("Failed to get label demand summary", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve label demand"})
 			return
 		}
 
-		trend, err := h.db.GetLabelDemandTrend(ctx, since)
+		trend, err := h.db.GetLabelDemandTrend(ctx, since, repo)
 		if err != nil {
 			logger.Logger.Error("Failed to get label demand trend", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve label demand trend"})
@@ -360,6 +363,19 @@ func (h *APIHandler) GetLabelDemand() gin.HandlerFunc {
 			"summary": summary,
 			"trend":   trend,
 		})
+	}
+}
+
+// GetRepositories returns the list of distinct repository names.
+func (h *APIHandler) GetRepositories() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		repos, err := h.db.GetRepositories(c.Request.Context())
+		if err != nil {
+			logger.Logger.Error("Failed to get repositories", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve repositories"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"repositories": repos})
 	}
 }
 

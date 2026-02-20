@@ -15,6 +15,7 @@ import type { LabelDemandResponse, Period } from '../api/types'
 
 interface Props {
   ready: boolean
+  repo: string
 }
 
 const PERIODS: { label: string; value: Period }[] = [
@@ -73,15 +74,15 @@ function Card({ label, value, sub }: { label: string; value: React.ReactNode; su
   )
 }
 
-export function LabelDemand({ ready }: Props) {
+export function LabelDemand({ ready, repo }: Props) {
   const [period, setPeriod] = useState<Period>('day')
   const [data, setData] = useState<LabelDemandResponse | null>(null)
 
   const load = useCallback((p: Period) => {
-    getLabelDemand(p)
+    getLabelDemand(p, repo)
       .then(setData)
       .catch((err) => console.error('Failed to load label demand', err))
-  }, [])
+  }, [repo])
 
   useEffect(() => {
     if (!ready) return

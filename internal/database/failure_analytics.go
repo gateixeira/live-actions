@@ -9,18 +9,21 @@ import (
 )
 
 // GetFailureAnalytics returns failure summary statistics for completed jobs
-// within the given time window.
-func (db *DBWrapper) GetFailureAnalytics(ctx context.Context, since time.Duration) (*models.FailureAnalytics, error) {
+// within the given time window. If repo is non-empty, filters to that repository.
+func (db *DBWrapper) GetFailureAnalytics(ctx context.Context, since time.Duration, repo string) (*models.FailureAnalytics, error) {
 	cutoff := time.Now().Add(-since).Format(time.RFC3339)
 
+	repoJoin, repoArgs := jobRepoFilter(repo)
+
 	var totalCompleted, totalFailed, totalCancelled int
+	args := append([]interface{}{cutoff}, repoArgs...)
 	err := db.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*),
-			COALESCE(SUM(CASE WHEN conclusion IN ('failure','timed_out') THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN conclusion = 'cancelled' THEN 1 ELSE 0 END), 0)
-		FROM workflow_jobs
-		WHERE status = 'completed' AND completed_at >= ?`, cutoff).Scan(&totalCompleted, &totalFailed, &totalCancelled)
+			COALESCE(SUM(CASE WHEN j.conclusion IN ('failure','timed_out') THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN j.conclusion = 'cancelled' THEN 1 ELSE 0 END), 0)
+		FROM workflow_jobs j`+repoJoin+`
+		WHERE j.status = 'completed' AND j.completed_at >= ?`+repoWhere(repo), args...).Scan(&totalCompleted, &totalFailed, &totalCancelled)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get failure summary: %w", err)
 	}
@@ -32,16 +35,16 @@ func (db *DBWrapper) GetFailureAnalytics(ctx context.Context, since time.Duratio
 
 	rows, err := db.db.QueryContext(ctx, `
 		SELECT
-			name,
-			MAX(html_url) AS html_url,
-			SUM(CASE WHEN conclusion IN ('failure','timed_out') THEN 1 ELSE 0 END) AS failures,
+			j.name,
+			MAX(j.html_url) AS html_url,
+			SUM(CASE WHEN j.conclusion IN ('failure','timed_out') THEN 1 ELSE 0 END) AS failures,
 			COUNT(*) AS total
-		FROM workflow_jobs
-		WHERE status = 'completed' AND completed_at >= ?
-		GROUP BY name
+		FROM workflow_jobs j`+repoJoin+`
+		WHERE j.status = 'completed' AND j.completed_at >= ?`+repoWhere(repo)+`
+		GROUP BY j.name
 		HAVING failures > 0
 		ORDER BY failures DESC
-		LIMIT 10`, cutoff)
+		LIMIT 10`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get top failing jobs: %w", err)
 	}
@@ -77,25 +80,27 @@ func (db *DBWrapper) GetFailureAnalytics(ctx context.Context, since time.Duratio
 
 // GetFailureTrend returns time-bucketed failure/success/cancelled counts.
 // Uses hourly buckets for periods <= 1 day, daily buckets otherwise.
-func (db *DBWrapper) GetFailureTrend(ctx context.Context, since time.Duration) ([]models.FailureTrendPoint, error) {
+func (db *DBWrapper) GetFailureTrend(ctx context.Context, since time.Duration, repo string) ([]models.FailureTrendPoint, error) {
 	cutoff := time.Now().Add(-since).Format(time.RFC3339)
 
-	// Choose bucket format: hourly for <= 1 day, daily otherwise
 	bucketFormat := "%Y-%m-%dT%H:00:00Z"
 	if since > 24*time.Hour {
 		bucketFormat = "%Y-%m-%dT00:00:00Z"
 	}
 
+	repoJoin, repoArgs := jobRepoFilter(repo)
+	args := append([]interface{}{cutoff}, repoArgs...)
+
 	rows, err := db.db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT
-			strftime('%s', completed_at) AS bucket,
-			COALESCE(SUM(CASE WHEN conclusion IN ('failure','timed_out') THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN conclusion = 'success' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN conclusion = 'cancelled' THEN 1 ELSE 0 END), 0)
-		FROM workflow_jobs
-		WHERE status = 'completed' AND completed_at >= ?
+			strftime('%s', j.completed_at) AS bucket,
+			COALESCE(SUM(CASE WHEN j.conclusion IN ('failure','timed_out') THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN j.conclusion = 'success' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN j.conclusion = 'cancelled' THEN 1 ELSE 0 END), 0)
+		FROM workflow_jobs j`+repoJoin+`
+		WHERE j.status = 'completed' AND j.completed_at >= ?`+repoWhere(repo)+`
 		GROUP BY bucket
-		ORDER BY bucket ASC`, bucketFormat), cutoff)
+		ORDER BY bucket ASC`, bucketFormat), args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get failure trend: %w", err)
 	}

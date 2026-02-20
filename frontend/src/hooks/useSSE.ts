@@ -14,28 +14,50 @@ export function useSSE(callbacks: SSECallbacks) {
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
-    const es = new EventSource('/events')
+    let es: EventSource | null = null
+    let retryDelay = 1000
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let cancelled = false
 
-    es.onopen = () => setConnected(true)
+    function connect() {
+      if (cancelled) return
+      es = new EventSource('/events')
 
-    es.addEventListener('message', (e) => {
-      try {
-        const outer = JSON.parse(e.data)
-        // SSE can send either a raw object or a {type, data} wrapper
-        if (typeof outer === 'object' && outer.type && outer.data) {
-          const { type, data } = outer
-          if (type === 'metrics_update') cbRef.current.onMetricsUpdate?.(data)
-          if (type === 'workflow_update') cbRef.current.onWorkflowUpdate?.(data)
-        }
-      } catch {
-        // ignore unparseable messages (e.g. initial "connected" string)
+      es.onopen = () => {
+        setConnected(true)
+        retryDelay = 1000 // reset backoff on successful connection
       }
-    })
 
-    es.onerror = () => setConnected(false)
+      es.addEventListener('message', (e) => {
+        try {
+          const outer = JSON.parse(e.data)
+          // SSE can send either a raw object or a {type, data} wrapper
+          if (typeof outer === 'object' && outer.type && outer.data) {
+            const { type, data } = outer
+            if (type === 'metrics_update') cbRef.current.onMetricsUpdate?.(data)
+            if (type === 'workflow_update') cbRef.current.onWorkflowUpdate?.(data)
+          }
+        } catch {
+          // ignore unparseable messages (e.g. initial "connected" string)
+        }
+      })
+
+      es.onerror = () => {
+        setConnected(false)
+        es?.close()
+        es = null
+        // Reconnect with exponential backoff (max 30s)
+        retryTimer = setTimeout(connect, retryDelay)
+        retryDelay = Math.min(retryDelay * 2, 30_000)
+      }
+    }
+
+    connect()
 
     return () => {
-      es.close()
+      cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
+      es?.close()
       setConnected(false)
     }
   }, [])

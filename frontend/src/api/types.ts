@@ -135,3 +135,7 @@ export interface LabelDemandResponse {
   summary: LabelDemandSummary[]
   trend: LabelDemandTrendPoint[]
 }
+
+export interface RepositoriesResponse {
+  repositories: string[]
+}

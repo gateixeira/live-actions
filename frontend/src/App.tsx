@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ThemeProvider, BaseStyles, Box, Header, Text, UnderlineNav } from '@primer/react'
+import { ThemeProvider, BaseStyles, Box, Header, Text, UnderlineNav, Autocomplete, FormControl } from '@primer/react'
 import { MarkGithubIcon, GraphIcon, AlertIcon, ServerIcon } from '@primer/octicons-react'
 import { MetricsCards } from './components/MetricsCards'
 import { DemandChart } from './components/DemandChart'
@@ -7,7 +7,7 @@ import { WorkflowTable } from './components/WorkflowTable'
 import { FailureAnalytics } from './components/FailureAnalytics'
 import { LabelDemand } from './components/LabelDemand'
 import { useSSE } from './hooks/useSSE'
-import { getMetrics, initCsrf } from './api/client'
+import { getMetrics, getRepositories, initCsrf } from './api/client'
 import type { MetricsResponse, Period } from './api/types'
 
 type Tab = 'dashboard' | 'failures' | 'labels'
@@ -19,11 +19,23 @@ export default function App() {
   const [liveRunning, setLiveRunning] = useState<number | null>(null)
   const [liveQueued, setLiveQueued] = useState<number | null>(null)
   const [ready, setReady] = useState(false)
+  const [selectedRepo, setSelectedRepo] = useState('')
+  const [repoItems, setRepoItems] = useState<{ id: string; text: string }[]>([])
 
   // Initialize CSRF token before making API calls
   useEffect(() => {
     initCsrf().then(() => setReady(true))
   }, [])
+
+  // Fetch repository list for autocomplete
+  useEffect(() => {
+    if (!ready) return
+    getRepositories()
+      .then((r) => setRepoItems(
+        r.repositories.map((name) => ({ id: name, text: name }))
+      ))
+      .catch((err) => console.error('Failed to load repositories', err))
+  }, [ready])
 
   const loadMetrics = useCallback(
     (p: Period) => {
@@ -57,6 +69,41 @@ export default function App() {
   const queued = liveQueued ?? metricsData?.current_metrics?.queued_jobs ?? 0
   const avgQueueTime = metricsData?.current_metrics?.avg_queue_time ?? 0
   const peakDemand = metricsData?.current_metrics?.peak_demand ?? 0
+
+  const repoFilter = (
+    <Box sx={{ mb: 3, p: 3, bg: 'canvas.subtle', borderRadius: 2, borderWidth: 1, borderStyle: 'solid', borderColor: 'border.default' }}>
+      <FormControl>
+        <FormControl.Label sx={{ mb: 2 }}>Filter by repository</FormControl.Label>
+        <Autocomplete id="repo-filter">
+          <Autocomplete.Input
+            placeholder="All repositories"
+            value={selectedRepo}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              if (e.target.value === '') setSelectedRepo('')
+            }}
+            sx={{ bg: 'canvas.default', width: '100%' }}
+          />
+          <Autocomplete.Overlay sx={{ zIndex: 100, bg: 'canvas.overlay', borderColor: 'border.default', boxShadow: 'shadow.large' }}>
+            <Autocomplete.Menu
+              items={repoItems}
+              selectedItemIds={selectedRepo ? [selectedRepo] : []}
+              onSelectedChange={(items) => {
+                if (!items) {
+                  setSelectedRepo('')
+                } else if (Array.isArray(items)) {
+                  setSelectedRepo(items.length > 0 ? (items[items.length - 1].text ?? '') : '')
+                } else {
+                  setSelectedRepo(items.text ?? '')
+                }
+              }}
+              selectionVariant="single"
+              aria-labelledby="repo-filter-label"
+            />
+          </Autocomplete.Overlay>
+        </Autocomplete>
+      </FormControl>
+    </Box>
+  )
 
   return (
     <ThemeProvider colorMode="auto">
@@ -118,16 +165,23 @@ export default function App() {
                   }}
                 />
 
-                <WorkflowTable ready={ready} refreshSignal={workflowRefresh} />
+                {repoFilter}
+                <WorkflowTable ready={ready} refreshSignal={workflowRefresh} repo={selectedRepo} />
               </>
             )}
 
             {activeTab === 'failures' && (
-              <FailureAnalytics ready={ready} />
+              <>
+                {repoFilter}
+                <FailureAnalytics ready={ready} repo={selectedRepo} />
+              </>
             )}
 
             {activeTab === 'labels' && (
-              <LabelDemand ready={ready} />
+              <>
+                {repoFilter}
+                <LabelDemand ready={ready} repo={selectedRepo} />
+              </>
             )}
           </Box>
         </Box>

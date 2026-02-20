@@ -4,6 +4,7 @@ import type {
   MetricsResponse,
   FailureAnalyticsResponse,
   LabelDemandResponse,
+  RepositoriesResponse,
   Period,
 } from './types'
 
@@ -16,6 +17,11 @@ function getCsrfToken(): string | null {
 // Fetch /api/csrf to get the CSRF token and set the cookie
 export async function initCsrf(): Promise<void> {
   if (getCsrfToken()) return
+  await refreshCsrf()
+}
+
+// Force-refresh the CSRF token (called on init and after 403 errors)
+async function refreshCsrf(): Promise<void> {
   try {
     const res = await fetch('/api/csrf', { credentials: 'same-origin' })
     const data = await res.json()
@@ -37,15 +43,30 @@ async function fetchJson<T>(url: string): Promise<T> {
     headers: headers(),
     credentials: 'same-origin',
   })
+  if (res.status === 403) {
+    // CSRF token may be stale after server restart — refresh and retry once
+    await refreshCsrf()
+    const retry = await fetch(url, {
+      headers: headers(),
+      credentials: 'same-origin',
+    })
+    if (!retry.ok) throw new Error(`${retry.status} ${retry.statusText}`)
+    return retry.json()
+  }
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json()
+}
+
+function repoParam(repo: string): string {
+  return repo ? `&repo=${encodeURIComponent(repo)}` : ''
 }
 
 export async function getWorkflowRuns(
   page = 1,
   limit = 25,
+  repo = '',
 ): Promise<WorkflowRunsResponse> {
-  return fetchJson(`/api/workflow-runs?page=${page}&limit=${limit}`)
+  return fetchJson(`/api/workflow-runs?page=${page}&limit=${limit}${repoParam(repo)}`)
 }
 
 export async function getWorkflowJobs(
@@ -60,12 +81,18 @@ export async function getMetrics(period: Period): Promise<MetricsResponse> {
 
 export async function getFailureAnalytics(
   period: Period,
+  repo = '',
 ): Promise<FailureAnalyticsResponse> {
-  return fetchJson(`/api/analytics/failures?period=${period}`)
+  return fetchJson(`/api/analytics/failures?period=${period}${repoParam(repo)}`)
 }
 
 export async function getLabelDemand(
   period: Period,
+  repo = '',
 ): Promise<LabelDemandResponse> {
-  return fetchJson(`/api/analytics/labels?period=${period}`)
+  return fetchJson(`/api/analytics/labels?period=${period}${repoParam(repo)}`)
+}
+
+export async function getRepositories(): Promise<RepositoriesResponse> {
+  return fetchJson('/api/repositories')
 }

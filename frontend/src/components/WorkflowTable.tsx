@@ -184,7 +184,7 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
   )
 }
 
-export function WorkflowTable({ ready, refreshSignal }: { ready: boolean; refreshSignal: number }) {
+export function WorkflowTable({ ready, refreshSignal, repo }: { ready: boolean; refreshSignal: number; repo: string }) {
   const [runs, setRuns] = useState<WorkflowRun[]>([])
   const [pagination, setPagination] = useState<Pagination | null>(null)
   const [page, setPage] = useState(1)
@@ -192,14 +192,14 @@ export function WorkflowTable({ ready, refreshSignal }: { ready: boolean; refres
 
   const load = useCallback(() => {
     setLoading(true)
-    getWorkflowRuns(page, 15)
+    getWorkflowRuns(page, 15, repo)
       .then((r) => {
         setRuns(r.workflow_runs ?? [])
         setPagination(r.pagination)
       })
       .catch((err) => { console.error('Failed to load workflow runs', err); setRuns([]) })
       .finally(() => setLoading(false))
-  }, [page])
+  }, [page, repo])
 
   useEffect(() => {
     if (!ready) return
