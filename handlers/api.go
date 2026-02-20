@@ -92,6 +92,56 @@ func ValidateOrigin() gin.HandlerFunc {
 	}
 }
 
+// ValidateSSEOrigin middleware validates the origin for SSE connections.
+// EventSource does not support custom headers, so only the Referer/Origin
+// header is checked (no CSRF token requirement).
+func ValidateSSEOrigin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Try Origin header first (preferred), then fall back to Referer
+		origin := c.Request.Header.Get("Origin")
+		referer := c.Request.Header.Get("Referer")
+
+		if origin == "" && referer == "" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Access denied. Missing origin.",
+			})
+			c.Abort()
+			return
+		}
+
+		checkURL := origin
+		if checkURL == "" {
+			checkURL = referer
+		}
+
+		parsedURL, err := url.Parse(checkURL)
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Access denied. Invalid origin.",
+			})
+			c.Abort()
+			return
+		}
+
+		requestHost := c.Request.Host
+		originHostname := parsedURL.Hostname()
+		requestHostname := requestHost
+		if h, _, err := net.SplitHostPort(requestHost); err == nil {
+			requestHostname = h
+		}
+
+		if originHostname != requestHostname {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Access denied. Cross-origin SSE connections are not allowed.",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // GetWorkflowRuns retrieves the list of workflow runs from the database with pagination support
 func (h *APIHandler) GetWorkflowRuns() gin.HandlerFunc {
 	return func(c *gin.Context) {

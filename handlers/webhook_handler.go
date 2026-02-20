@@ -51,10 +51,14 @@ func ValidateGitHubWebhook(config *config.Config) gin.HandlerFunc {
 			signatureHash = signature[7:]
 		}
 
+		// Limit request body size to prevent memory exhaustion (10 MB)
+		const maxBodySize = 10 * 1024 * 1024
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodySize)
+
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
 			logger.Logger.Error("Error reading request body", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read request body"})
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Request body too large"})
 			c.Abort()
 			return
 		}
@@ -172,7 +176,12 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 			return
 		}
 
-		handler := h.handlers[eventTypeStr]
+		handler, exists := h.handlers[eventTypeStr]
+		if !exists {
+			logger.Logger.Warn("No handler registered for event type", zap.String("event_type", eventTypeStr))
+			c.JSON(http.StatusOK, gin.H{"status": "ignored", "message": "Event type not supported"})
+			return
+		}
 		extractedTime, err := handler.ExtractEventTimestamp(jsonData)
 
 		if err != nil {

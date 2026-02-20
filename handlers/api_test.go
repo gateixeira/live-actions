@@ -667,3 +667,101 @@ func TestGetCSRFToken_SecureCookie(t *testing.T) {
 	assert.NotNil(t, csrfCookie)
 	assert.True(t, csrfCookie.Secure, "Cookie should be secure in production")
 }
+
+func TestValidateSSEOrigin_MissingOriginAndReferer(t *testing.T) {
+	router, _, _ := setupAPITest()
+	router.Use(ValidateSSEOrigin())
+	router.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/events", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Missing origin")
+}
+
+func TestValidateSSEOrigin_CrossOrigin(t *testing.T) {
+	router, _, _ := setupAPITest()
+	router.Use(ValidateSSEOrigin())
+	router.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/events", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set("Origin", "http://evil.com")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Cross-origin SSE connections are not allowed")
+}
+
+func TestValidateSSEOrigin_InvalidOrigin(t *testing.T) {
+	router, _, _ := setupAPITest()
+	router.Use(ValidateSSEOrigin())
+	router.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/events", nil)
+	req.Header.Set("Origin", "://invalid-url")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Invalid origin")
+}
+
+func TestValidateSSEOrigin_ValidOriginHeader(t *testing.T) {
+	router, _, _ := setupAPITest()
+	router.Use(ValidateSSEOrigin())
+	router.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/events", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set("Origin", "http://localhost:8080")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestValidateSSEOrigin_ValidRefererHeader(t *testing.T) {
+	router, _, _ := setupAPITest()
+	router.Use(ValidateSSEOrigin())
+	router.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/events", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set("Referer", "http://localhost:8080/dashboard")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestValidateSSEOrigin_OriginPreferredOverReferer(t *testing.T) {
+	router, _, _ := setupAPITest()
+	router.Use(ValidateSSEOrigin())
+	router.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Origin says evil.com, Referer says localhost - Origin should be checked first
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/events", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set("Origin", "http://evil.com")
+	req.Header.Set("Referer", "http://localhost:8080/dashboard")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}

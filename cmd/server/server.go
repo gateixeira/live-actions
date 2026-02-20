@@ -93,7 +93,7 @@ func SetupAndRun(staticFS embed.FS) {
 	r.GET("/api/metrics/query_range", handlers.ValidateOrigin(), apiHandler.GetCurrentMetrics())
 	r.GET("/api/analytics/failures", handlers.ValidateOrigin(), apiHandler.GetFailureAnalytics())
 	r.GET("/api/analytics/labels", handlers.ValidateOrigin(), apiHandler.GetLabelDemand())
-	r.GET("/events", sseHandler.HandleSSE())
+	r.GET("/events", handlers.ValidateSSEOrigin(), sseHandler.HandleSSE())
 	r.GET("/metrics", metricsHandler.Metrics())
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
