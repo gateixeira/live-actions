@@ -126,8 +126,8 @@ func ValidateSSEOrigin() gin.HandlerFunc {
 		requestHost := c.Request.Host
 		originHostname := parsedURL.Hostname()
 		requestHostname := requestHost
-		if h, _, err := net.SplitHostPort(requestHost); err == nil {
-			requestHostname = h
+		if hostname, _, err := net.SplitHostPort(requestHost); err == nil {
+			requestHostname = hostname
 		}
 
 		if originHostname != requestHostname {

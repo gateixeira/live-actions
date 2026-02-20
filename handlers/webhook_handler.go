@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -58,7 +59,12 @@ func ValidateGitHubWebhook(config *config.Config) gin.HandlerFunc {
 		body, err := io.ReadAll(c.Request.Body)
 		if err != nil {
 			logger.Logger.Error("Error reading request body", zap.Error(err))
-			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Request body too large"})
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Request body too large"})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read request body"})
+			}
 			c.Abort()
 			return
 		}
