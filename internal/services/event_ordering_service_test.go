@@ -439,7 +439,7 @@ func TestEventOrderingService_ConcurrentAccess(t *testing.T) {
 					"concurrent-test",
 					1,
 				)
-				service.AddEvent(event)
+				_ = service.AddEvent(event)
 			}
 		}(i)
 	}

@@ -52,7 +52,7 @@ func TestErrorHandler_ErrorHandling(t *testing.T) {
 	router := gin.New()
 	router.Use(ErrorHandler())
 	router.GET("/error", func(c *gin.Context) {
-		c.Error(errors.New("test error"))
+		_ = c.Error(errors.New("test error"))
 		c.JSON(500, gin.H{"error": "internal error"})
 	})
 
@@ -69,7 +69,7 @@ func TestErrorHandler_ClientError(t *testing.T) {
 	router := gin.New()
 	router.Use(ErrorHandler())
 	router.GET("/bad-request", func(c *gin.Context) {
-		c.Error(errors.New("invalid input"))
+		_ = c.Error(errors.New("invalid input"))
 		c.Status(http.StatusBadRequest)
 	})
 
@@ -355,7 +355,7 @@ func TestErrorHandler_Integration(t *testing.T) {
 	})
 
 	router.GET("/error", func(c *gin.Context) {
-		c.Error(errors.New("test error"))
+		_ = c.Error(errors.New("test error"))
 	})
 
 	router.GET("/panic", func(c *gin.Context) {

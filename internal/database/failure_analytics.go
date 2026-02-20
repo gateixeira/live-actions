@@ -8,10 +8,6 @@ import (
 	"github.com/gateixeira/live-actions/models"
 )
 
-// failureConclusions lists conclusions that count as failures for workflow jobs.
-// Note: "startup_failure" is only valid for workflow_runs, not workflow_jobs.
-var failureConclusions = []string{"failure", "timed_out"}
-
 // GetFailureAnalytics returns failure summary statistics for completed jobs
 // within the given time window.
 func (db *DBWrapper) GetFailureAnalytics(ctx context.Context, since time.Duration) (*models.FailureAnalytics, error) {

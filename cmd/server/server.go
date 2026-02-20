@@ -37,7 +37,9 @@ func SetupAndRun(staticFS embed.FS) {
 	// Ensure data directory exists for SQLite
 	dbPath := cfg.GetDatabasePath()
 	if dir := filepath.Dir(dbPath); dir != "." && dir != "" {
-		os.MkdirAll(dir, 0700)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			logger.Logger.Error("Failed to create data directory", zap.String("dir", dir), zap.Error(err))
+		}
 	}
 
 	sqlDB, err := database.InitDB(dbPath)

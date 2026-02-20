@@ -270,7 +270,7 @@ func (h *WebhookHandler) processOrderedEvent(event *models.OrderedEvent) error {
 		logger.Logger.Error("Failed to handle event", zap.Error(err),
 			zap.String("event_type", event.EventType),
 			zap.String("delivery_id", event.Sequence.DeliveryID))
-		h.db.MarkEventFailed(context.TODO(), event.Sequence.DeliveryID)
+		_ = h.db.MarkEventFailed(context.TODO(), event.Sequence.DeliveryID)
 		return fmt.Errorf("failed to handle event: %w", err)
 	}
 
