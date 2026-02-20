@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Box, Text, Label, Spinner, RelativeTime, Link, SegmentedControl, IconButton } from '@primer/react'
+import { Box, Text, Label, Spinner, RelativeTime, Link, Pagination } from '@primer/react'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -186,18 +186,6 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
   )
 }
 
-function pageRange(current: number, total: number): (number | '...')[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const pages: (number | '...')[] = [1]
-  const start = Math.max(2, current - 1)
-  const end = Math.min(total - 1, current + 1)
-  if (start > 2) pages.push('...')
-  for (let i = start; i <= end; i++) pages.push(i)
-  if (end < total - 1) pages.push('...')
-  pages.push(total)
-  return pages
-}
-
 export function WorkflowTable({ ready, refreshSignal, repo, status }: { ready: boolean; refreshSignal: number; repo: string; status: string }) {
   const [runs, setRuns] = useState<WorkflowRun[]>([])
   const [pagination, setPagination] = useState<PaginationData | null>(null)
@@ -227,21 +215,11 @@ export function WorkflowTable({ ready, refreshSignal, repo, status }: { ready: b
           Recent Workflow Runs{pagination ? ` (${pagination.total_count} runs)` : ''}
         </Text>
         {pagination && pagination.total_pages > 1 && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <IconButton aria-label="First page" icon={() => <span>«</span>} size="small" variant="invisible" disabled={page === 1} onClick={() => setPage(1)} />
-            <SegmentedControl aria-label="Page" size="small" onChange={(i) => {
-              const pages = pageRange(page, pagination.total_pages)
-              const selected = pages[i]
-              if (typeof selected === 'number') setPage(selected)
-            }}>
-              {pageRange(page, pagination.total_pages).map((p, i) => (
-                <SegmentedControl.Button key={`${p}-${i}`} selected={p === page} disabled={p === '...'}>
-                  {p === '...' ? '…' : String(p)}
-                </SegmentedControl.Button>
-              ))}
-            </SegmentedControl>
-            <IconButton aria-label="Last page" icon={() => <span>»</span>} size="small" variant="invisible" disabled={page === pagination.total_pages} onClick={() => setPage(pagination.total_pages)} />
-          </Box>
+          <Pagination
+            pageCount={pagination.total_pages}
+            currentPage={page}
+            onPageChange={(e, p) => { e.preventDefault(); setPage(p) }}
+          />
         )}
       </Box>
 
