@@ -106,9 +106,7 @@ func SetupAndRun(staticFS embed.FS) {
 	if err != nil {
 		logger.Logger.Fatal("Failed to load embedded index.html", zap.Error(err))
 	}
-	r.NoRoute(func(c *gin.Context) {
-		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
-	})
+	r.NoRoute(spaFallbackHandler(indexHTML))
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -150,4 +148,15 @@ func SetupAndRun(staticFS embed.FS) {
 	metricsService.Stop()
 
 	logger.Logger.Info("Server shutdown complete")
+}
+
+func spaFallbackHandler(indexHTML []byte) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.JSON(http.StatusNotFound, gin.H{"error": "route not found"})
+			return
+		}
+
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+	}
 }
