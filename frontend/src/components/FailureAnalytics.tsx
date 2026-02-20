@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Box, Text, SegmentedControl, Label } from '@primer/react'
+import { Box, Text, SegmentedControl, Label, Link } from '@primer/react'
 import {
   ResponsiveContainer,
   BarChart,
@@ -160,23 +160,22 @@ export function FailureAnalytics({ ready, repo }: Props) {
             <tbody>
               {(!summary?.top_failing_jobs || summary.top_failing_jobs.length === 0) ? (
                 <tr>
-                  <Box as="td" colSpan={4} sx={{ textAlign: 'center', color: 'fg.muted', py: 4 }}>
-                    No failures in this period
-                  </Box>
+                  <td colSpan={4} style={{ textAlign: 'center' }}>
+                    <Text sx={{ color: 'fg.muted' }}>No failures in this period</Text>
+                  </td>
                 </tr>
               ) : (
                 summary.top_failing_jobs.map((job) => (
                   <tr key={job.name}>
                     <td>
-                      <Text
-                        as="a"
+                      <Link
                         href={job.html_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        sx={{ fontWeight: 'semibold', color: 'accent.fg' }}
+                        sx={{ fontWeight: 'semibold' }}
                       >
                         {job.name}
-                      </Text>
+                      </Link>
                     </td>
                     <td>
                       <Label variant="danger">{job.failures}</Label>

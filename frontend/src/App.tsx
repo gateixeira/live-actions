@@ -162,7 +162,7 @@ export default function App() {
             <Header.Item>
               <Header.Link href="/" sx={{ fontSize: 2, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 2 }}>
                 <MarkGithubIcon size={24} />
-                <span>Live Actions</span>
+                Live Actions
               </Header.Link>
             </Header.Item>
             <Header.Item full />

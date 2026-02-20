@@ -191,9 +191,9 @@ export function LabelDemand({ ready, repo }: Props) {
             <tbody>
               {summary.length === 0 ? (
                 <tr>
-                  <Box as="td" colSpan={5} sx={{ textAlign: 'center', color: 'fg.muted', py: 4 }}>
-                    No data available for this period
-                  </Box>
+                  <td colSpan={5} style={{ textAlign: 'center' }}>
+                    <Text sx={{ color: 'fg.muted' }}>No data available for this period</Text>
+                  </td>
                 </tr>
               ) : (
                 summary.map((s) => (
