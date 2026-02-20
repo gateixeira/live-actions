@@ -765,3 +765,56 @@ func TestValidateSSEOrigin_OriginPreferredOverReferer(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
+
+func TestValidateSSEOrigin_CrossPortOrigin(t *testing.T) {
+	router, _, _ := setupAPITest()
+	router.Use(ValidateSSEOrigin())
+	router.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Same hostname but different port should be rejected
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/events", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set("Origin", "http://localhost:1234")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Cross-origin SSE connections are not allowed")
+}
+
+func TestValidateSSEOrigin_OriginWithoutHost(t *testing.T) {
+	router, _, _ := setupAPITest()
+	router.Use(ValidateSSEOrigin())
+	router.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Origin without a host should be rejected
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/events", nil)
+	req.Host = "localhost:8080"
+	req.Header.Set("Origin", "file:///etc/passwd")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Body.String(), "Origin must contain a host")
+}
+
+func TestValidateSSEOrigin_DefaultPortNormalization(t *testing.T) {
+	router, _, _ := setupAPITest()
+	router.Use(ValidateSSEOrigin())
+	router.GET("/events", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// http://localhost (default port 80) should match request host localhost:80
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/events", nil)
+	req.Host = "localhost:80"
+	req.Header.Set("Origin", "http://localhost")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}

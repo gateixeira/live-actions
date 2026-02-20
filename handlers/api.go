@@ -128,14 +128,23 @@ func ValidateSSEOrigin() gin.HandlerFunc {
 			return
 		}
 
-		requestHost := c.Request.Host
-		originHostname := parsedURL.Hostname()
-		requestHostname := requestHost
-		if hostname, _, err := net.SplitHostPort(requestHost); err == nil {
-			requestHostname = hostname
+		// Reject origins that don't contain a host
+		originHost := parsedURL.Host
+		if originHost == "" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Access denied. Origin must contain a host.",
+			})
+			c.Abort()
+			return
 		}
 
-		if originHostname != requestHostname {
+		// Compare full host:port to prevent cross-port attacks.
+		// Normalize by adding default ports when missing.
+		requestHost := c.Request.Host
+		normalizedOriginHost := normalizeHost(parsedURL.Scheme, originHost)
+		normalizedRequestHost := normalizeHost("", requestHost)
+
+		if normalizedOriginHost != normalizedRequestHost {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "Access denied. Cross-origin SSE connections are not allowed.",
 			})
@@ -145,6 +154,23 @@ func ValidateSSEOrigin() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// normalizeHost ensures a host string has an explicit port by appending
+// the default port for the given scheme when no port is present.
+// For request hosts (scheme=""), it returns the host as-is.
+func normalizeHost(scheme, host string) string {
+	_, _, err := net.SplitHostPort(host)
+	if err != nil {
+		// No port present – add the default for the scheme
+		switch scheme {
+		case "https":
+			return host + ":443"
+		default:
+			return host + ":80"
+		}
+	}
+	return host
 }
 
 // GetWorkflowRuns retrieves the list of workflow runs from the database with pagination support
