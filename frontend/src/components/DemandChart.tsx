@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import type { MetricsResponse, Period } from '../api/types'
 import { PERIODS, formatTime } from '../utils/format'
+import { useChartColors } from '../hooks/useChartColors'
 
 interface Props {
   data: MetricsResponse | null
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function DemandChart({ data, period, onPeriodChange }: Props) {
+  const colors = useChartColors()
   const chartData = useMemo(() => {
     if (!data) return []
     const running = data.time_series.running_jobs?.data?.result ?? []
@@ -97,7 +99,7 @@ export function DemandChart({ data, period, onPeriodChange }: Props) {
                 type="monotone"
                 dataKey="running"
                 name="Running"
-                stroke="#2da44e"
+                stroke={colors.success}
                 strokeWidth={2}
                 dot={false}
               />
@@ -105,7 +107,7 @@ export function DemandChart({ data, period, onPeriodChange }: Props) {
                 type="monotone"
                 dataKey="queued"
                 name="Queued"
-                stroke="#bf8700"
+                stroke={colors.attention}
                 strokeWidth={2}
                 dot={false}
               />

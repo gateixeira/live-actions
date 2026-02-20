@@ -13,6 +13,7 @@ import {
 import { getLabelDemand } from '../api/client'
 import { Card } from './Card'
 import { PERIODS, formatTime, formatSeconds } from '../utils/format'
+import { useChartColors } from '../hooks/useChartColors'
 import type { LabelDemandResponse, Period } from '../api/types'
 
 interface Props {
@@ -20,13 +21,8 @@ interface Props {
   repo: string
 }
 
-// Distinct colors for up to 10 labels
-const LABEL_COLORS = [
-  '#2da44e', '#0969da', '#bf8700', '#cf222e', '#8250df',
-  '#1a7f37', '#0550ae', '#953800', '#a40e26', '#6639ba',
-]
-
 export function LabelDemand({ ready, repo }: Props) {
+  const colors = useChartColors()
   const [period, setPeriod] = useState<Period>('day')
   const [data, setData] = useState<LabelDemandResponse | null>(null)
 
@@ -146,7 +142,7 @@ export function LabelDemand({ ready, repo }: Props) {
                     key={label}
                     type="monotone"
                     dataKey={label}
-                    stroke={LABEL_COLORS[i % LABEL_COLORS.length]}
+                    stroke={colors.palette[i % colors.palette.length]}
                     strokeWidth={2}
                     dot={false}
                   />

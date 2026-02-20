@@ -13,6 +13,7 @@ import {
 import { getFailureAnalytics } from '../api/client'
 import { Card } from './Card'
 import { PERIODS, formatTime } from '../utils/format'
+import { useChartColors } from '../hooks/useChartColors'
 import type { FailureAnalyticsResponse, Period } from '../api/types'
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function FailureAnalytics({ ready, repo }: Props) {
+  const colors = useChartColors()
   const [period, setPeriod] = useState<Period>('day')
   const [data, setData] = useState<FailureAnalyticsResponse | null>(null)
 
@@ -118,9 +120,9 @@ export function FailureAnalytics({ ready, repo }: Props) {
                   labelFormatter={(v) => new Date((v as number) * 1000).toLocaleString()}
                 />
                 <Legend />
-                <Bar dataKey="Successes" stackId="a" fill="#2da44e" />
-                <Bar dataKey="Failures" stackId="a" fill="#cf222e" />
-                <Bar dataKey="Cancelled" stackId="a" fill="#bf8700" />
+                <Bar dataKey="Successes" stackId="a" fill={colors.success} />
+                <Bar dataKey="Failures" stackId="a" fill={colors.danger} />
+                <Bar dataKey="Cancelled" stackId="a" fill={colors.attention} />
               </BarChart>
             </ResponsiveContainer>
           )}
