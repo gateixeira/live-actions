@@ -181,7 +181,7 @@ func (db *DBWrapper) GetPendingEventsByAge(ctx context.Context, maxAge time.Dura
 func (db *DBWrapper) MarkEventProcessed(ctx context.Context, deliveryID string) error {
 	now := time.Now().Format(time.RFC3339)
 	_, err := db.db.ExecContext(ctx,
-		"UPDATE webhook_events SET status = 'processed', processed_at = ? WHERE delivery_id = ?",
+		"UPDATE webhook_events SET status = 'processed', processed_at = ?, raw_payload = NULL WHERE delivery_id = ?",
 		now, deliveryID)
 	if err != nil {
 		return fmt.Errorf("failed to mark event as processed: %w", err)
