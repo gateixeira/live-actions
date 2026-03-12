@@ -38,6 +38,8 @@ func TestCleanupService_StartStop(t *testing.T) {
 
 	// Setup mock expectations for initial cleanup
 	expectedRetention := config.GetDataRetentionDuration()
+	expectedStaleThreshold := config.GetStaleJobThreshold()
+	mockDB.On("CleanupStaleJobs", mock.Anything, expectedStaleThreshold).Return(int64(0), nil)
 	mockDB.On("CleanupOldData", mock.Anything, expectedRetention).Return(int64(0), int64(0), int64(0), nil)
 
 	// Start the service in a goroutine since it blocks
@@ -79,6 +81,8 @@ func TestCleanupService_ContextCancellation(t *testing.T) {
 
 	// Setup mock expectations for initial cleanup
 	expectedRetention := config.GetDataRetentionDuration()
+	expectedStaleThreshold := config.GetStaleJobThreshold()
+	mockDB.On("CleanupStaleJobs", mock.Anything, expectedStaleThreshold).Return(int64(0), nil)
 	mockDB.On("CleanupOldData", mock.Anything, expectedRetention).Return(int64(0), int64(0), int64(0), nil)
 
 	// Start the service in a goroutine since it blocks

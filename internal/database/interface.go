@@ -34,6 +34,7 @@ type DatabaseInterface interface {
 
 	// Cleanup
 	CleanupOldData(ctx context.Context, retentionPeriod time.Duration) (int64, int64, int64, error)
+	CleanupStaleJobs(ctx context.Context, threshold time.Duration) (int64, error)
 
 	// Repositories
 	GetRepositories(ctx context.Context) ([]string, error)

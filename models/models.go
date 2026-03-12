@@ -14,6 +14,7 @@ const (
 	JobStatusWaiting    JobStatus = "waiting"
 	JobStatusRequested  JobStatus = "requested"
 	JobStatusCancelled  JobStatus = "cancelled"
+	JobStatusStale      JobStatus = "stale"
 )
 
 // WebhookEvent represents the incoming webhook payload

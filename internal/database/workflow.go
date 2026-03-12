@@ -49,7 +49,7 @@ func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.Work
 
 	var isTerminal bool
 	err = tx.QueryRow(`
-		SELECT CASE WHEN status IN ('completed', 'cancelled') THEN 1 ELSE 0 END
+		SELECT CASE WHEN status IN ('completed', 'cancelled', 'stale') THEN 1 ELSE 0 END
 		FROM workflow_jobs 
 		WHERE id = ?`, workflowJob.ID).Scan(&isTerminal)
 
@@ -355,6 +355,29 @@ func (db *DBWrapper) CleanupOldData(ctx context.Context, retentionPeriod time.Du
 	committed = true
 
 	return deletedRuns, deletedJobs, deletedEvents, nil
+}
+
+// CleanupStaleJobs marks jobs stuck in 'queued' or 'in_progress' status
+// for longer than the given threshold as 'stale'. This handles cases
+// where webhook events were missed and jobs are left in a non-terminal state.
+func (db *DBWrapper) CleanupStaleJobs(ctx context.Context, threshold time.Duration) (int64, error) {
+	cutoffTime := time.Now().Add(-threshold).Format(time.RFC3339)
+
+	result, err := db.db.ExecContext(ctx, `
+		UPDATE workflow_jobs
+		SET status = 'stale', completed_at = CURRENT_TIMESTAMP
+		WHERE status IN ('queued', 'in_progress')
+		AND created_at < ?`, cutoffTime)
+	if err != nil {
+		return 0, fmt.Errorf("failed to mark stale jobs: %w", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get affected rows count: %w", err)
+	}
+
+	return affected, nil
 }
 
 func (db *DBWrapper) GetCurrentJobCounts(ctx context.Context) (int, int, error) {

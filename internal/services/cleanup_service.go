@@ -71,11 +71,24 @@ func (cs *CleanupService) Stop() {
 // performCleanup executes the actual cleanup operation
 func (cs *CleanupService) performCleanup() error {
 	retentionPeriod := cs.config.GetDataRetentionDuration()
+	staleThreshold := cs.config.GetStaleJobThreshold()
 
 	logger.Logger.Debug("Starting data cleanup",
 		zap.Duration("retention_period", retentionPeriod),
 		zap.Time("cutoff_time", time.Now().Add(-retentionPeriod)),
+		zap.Duration("stale_job_threshold", staleThreshold),
 	)
+
+	// Mark stale jobs as cancelled before deleting old data
+	staleJobs, err := cs.db.CleanupStaleJobs(cs.ctx, staleThreshold)
+	if err != nil {
+		logger.Logger.Error("Stale job cleanup failed", zap.Error(err))
+	} else if staleJobs > 0 {
+		logger.Logger.Info("Stale jobs cleaned up",
+			zap.Int64("cancelled_stale_jobs", staleJobs),
+			zap.Duration("stale_threshold", staleThreshold),
+		)
+	}
 
 	deletedRuns, deletedJobs, deletedEvents, err := cs.db.CleanupOldData(cs.ctx, retentionPeriod)
 	if err != nil {

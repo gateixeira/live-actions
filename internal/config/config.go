@@ -8,14 +8,15 @@ import (
 )
 
 type Vars struct {
-	WebhookSecret        string
-	Port                 string
-	DatabasePath         string
-	LogLevel             string
-	TLSEnabled           bool
-	Environment          string
-	DataRetentionDays    int
-	CleanupIntervalHours int
+	WebhookSecret          string
+	Port                   string
+	DatabasePath           string
+	LogLevel               string
+	TLSEnabled             bool
+	Environment            string
+	DataRetentionDays      int
+	CleanupIntervalHours   int
+	StaleJobThresholdHours int
 }
 
 type Config struct {
@@ -31,8 +32,9 @@ func NewConfig() (*Config, error) {
 		LogLevel:             getEnvOrDefault("LOG_LEVEL", "info"),
 		TLSEnabled:           getEnvOrDefault("TLS_ENABLED", "false") == "true",
 		Environment:          getEnvOrDefault("ENVIRONMENT", "development"),
-		DataRetentionDays:    getEnvOrDefaultInt("DATA_RETENTION_DAYS", 30),    // Default 1 month
-		CleanupIntervalHours: getEnvOrDefaultInt("CLEANUP_INTERVAL_HOURS", 24), // Daily cleanup
+		DataRetentionDays:      getEnvOrDefaultInt("DATA_RETENTION_DAYS", 30),      // Default 1 month
+		CleanupIntervalHours:   getEnvOrDefaultInt("CLEANUP_INTERVAL_HOURS", 24),   // Daily cleanup
+		StaleJobThresholdHours: getEnvOrDefaultInt("STALE_JOB_THRESHOLD_HOURS", 24), // Jobs queued/in_progress longer than this are considered stale
 	}
 
 	config := &Config{Vars: vars}
@@ -86,4 +88,9 @@ func (c *Config) GetDataRetentionDuration() time.Duration {
 // GetCleanupInterval returns the cleanup interval as a time.Duration
 func (c *Config) GetCleanupInterval() time.Duration {
 	return time.Duration(c.Vars.CleanupIntervalHours) * time.Hour
+}
+
+// GetStaleJobThreshold returns the stale job threshold as a time.Duration
+func (c *Config) GetStaleJobThreshold() time.Duration {
+	return time.Duration(c.Vars.StaleJobThresholdHours) * time.Hour
 }

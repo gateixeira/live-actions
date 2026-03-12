@@ -116,3 +116,8 @@ func (m *MockDatabase) GetRepositories(ctx context.Context) ([]string, error) {
 	args := m.Called(ctx)
 	return args.Get(0).([]string), args.Error(1)
 }
+
+func (m *MockDatabase) CleanupStaleJobs(ctx context.Context, threshold time.Duration) (int64, error) {
+	args := m.Called(ctx, threshold)
+	return args.Get(0).(int64), args.Error(1)
+}
