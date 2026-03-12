@@ -159,13 +159,16 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, lim
 		args = append(args, repo)
 	}
 	if status != "" {
-		// "completed" is a status; "success", "failure", "cancelled" are conclusions
 		switch status {
 		case "requested", "in_progress", "completed":
 			where += " AND status = ?"
 			args = append(args, status)
 		case "success", "failure", "cancelled", "action_required":
 			where += " AND conclusion = ?"
+			args = append(args, status)
+		case "queued", "stale":
+			// Job-level statuses: find runs that have at least one job with this status
+			where += " AND EXISTS (SELECT 1 FROM workflow_jobs WHERE workflow_jobs.run_id = workflow_runs.id AND workflow_jobs.status = ?)"
 			args = append(args, status)
 		}
 	}

@@ -29,6 +29,8 @@ export default function App() {
     { id: '', label: 'All statuses' },
     { id: 'requested', label: 'Requested' },
     { id: 'in_progress', label: 'In Progress' },
+    { id: 'queued', label: 'Queued' },
+    { id: 'stale', label: 'Stale' },
     { id: 'success', label: 'Success' },
     { id: 'failure', label: 'Failed' },
     { id: 'cancelled', label: 'Cancelled' },
