@@ -55,6 +55,7 @@ func (d *DBWrapper) GetMetricsSummary(ctx context.Context, since time.Duration) 
 		"running_jobs":   0,
 		"queued_jobs":    0,
 		"avg_queue_time": 0,
+		"avg_run_time":   0,
 		"peak_demand":    0,
 	}
 
@@ -82,6 +83,17 @@ func (d *DBWrapper) GetMetricsSummary(ctx context.Context, since time.Duration) 
 	WHERE started_at IS NOT NULL AND started_at >= ?`, jobsCutoff).Scan(&avgQueue)
 	if err == nil {
 		result["avg_queue_time"] = avgQueue
+	}
+
+	// Average run time: average seconds between started_at and completed_at for
+	// jobs that completed within the period.
+	var avgRun float64
+	err = d.db.QueryRowContext(ctx, `SELECT COALESCE(AVG(
+		(julianday(completed_at) - julianday(started_at)) * 86400
+	), 0) FROM workflow_jobs
+	WHERE completed_at IS NOT NULL AND started_at IS NOT NULL AND completed_at >= ?`, jobsCutoff).Scan(&avgRun)
+	if err == nil {
+		result["avg_run_time"] = avgRun
 	}
 
 	// metrics_snapshots stores timestamps as datetime (no T, no Z)

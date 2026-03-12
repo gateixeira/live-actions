@@ -81,6 +81,7 @@ export default function App() {
   const running = liveRunning ?? metricsData?.current_metrics?.running_jobs ?? 0
   const queued = liveQueued ?? metricsData?.current_metrics?.queued_jobs ?? 0
   const avgQueueTime = metricsData?.current_metrics?.avg_queue_time ?? 0
+  const avgRunTime = metricsData?.current_metrics?.avg_run_time ?? 0
   const peakDemand = metricsData?.current_metrics?.peak_demand ?? 0
 
   const filteredRepoItems = useMemo(() => {
@@ -202,6 +203,7 @@ export default function App() {
                   running={running}
                   queued={queued}
                   avgQueueTime={avgQueueTime}
+                  avgRunTime={avgRunTime}
                   peakDemand={peakDemand}
                 />
 
