@@ -1,32 +1,30 @@
-import { Box, Heading, Text } from '@primer/react'
-
 interface CardProps {
   label: string
   value: React.ReactNode
-  color?: string
   sub?: string
+  accent?: 'emerald' | 'red' | 'amber' | 'blue' | 'default'
 }
 
-export function Card({ label, value, color, sub }: CardProps) {
+const ACCENT_CLASSES: Record<string, string> = {
+  emerald: 'text-emerald-400',
+  red: 'text-red-400',
+  amber: 'text-amber-400',
+  blue: 'text-blue-400',
+  default: 'text-white',
+}
+
+export function Card({ label, value, sub, accent = 'default' }: CardProps) {
   return (
-    <Box
-      sx={{
-        p: 3,
-        borderRadius: 2,
-        border: '1px solid',
-        borderColor: 'border.default',
-        bg: 'canvas.default',
-        flex: '1 1 160px',
-        minWidth: 160,
-      }}
-    >
-      <Text sx={{ fontSize: 0, color: 'fg.muted', display: 'block', mb: 1 }}>{label}</Text>
-      <Heading as="h3" sx={{ fontSize: 4, fontWeight: 'bold', color: color || 'fg.default' }}>
+    <div className="flex min-w-[160px] flex-1 flex-col rounded-xl border border-gray-800 bg-gray-900 p-4">
+      <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+        {label}
+      </span>
+      <span className={`mt-1 text-2xl font-semibold tabular-nums ${ACCENT_CLASSES[accent]}`}>
         {value}
-      </Heading>
+      </span>
       {sub && (
-        <Text sx={{ fontSize: 0, color: 'fg.muted', display: 'block', mt: 1 }}>{sub}</Text>
+        <span className="mt-1 text-xs text-gray-500">{sub}</span>
       )}
-    </Box>
+    </div>
   )
 }

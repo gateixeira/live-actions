@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --color-chart-green: #34d399;
+  --color-chart-blue: #60a5fa;
+  --color-chart-amber: #fbbf24;
+  --color-chart-red: #f87171;
+  --color-chart-purple: #a78bfa;
+  --color-chart-cyan: #22d3ee;
+  --color-chart-pink: #f472b6;
+  --color-chart-lime: #a3e635;
+  --color-chart-orange: #fb923c;
+  --color-chart-teal: #2dd4bf;
+}
+
+/* Recharts overrides for dark theme */
+.recharts-cartesian-grid line {
+  stroke: #374151;
+}
+.recharts-text {
+  fill: #9ca3af;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  border-radius: 0.5rem !important;
+}
+.recharts-tooltip-item {
+  color: #e5e7eb !important;
+}
+.recharts-legend-item-text {
+  color: #d1d5db !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}

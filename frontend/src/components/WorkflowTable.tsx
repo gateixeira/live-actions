@@ -1,44 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Box, Text, Label, Spinner, RelativeTime, Link, Pagination } from '@primer/react'
-import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CheckCircleFillIcon,
-  XCircleFillIcon,
-  ClockIcon,
-  SkipFillIcon,
-  HourglassIcon,
-  AlertIcon,
-} from '@primer/octicons-react'
+import { ChevronDown, ChevronRight, ExternalLink, Loader2 } from 'lucide-react'
+import { StatusBadge } from './StatusBadge'
 import type { WorkflowRun, WorkflowJob, Pagination as PaginationData } from '../api/types'
 import { getWorkflowRuns, getWorkflowJobs } from '../api/client'
 
 const MAX_TEXT_LEN = 50
 function truncate(text: string): string {
   return text.length > MAX_TEXT_LEN ? text.slice(0, MAX_TEXT_LEN) + '…' : text
-}
-
-function StatusBadge({ status, conclusion }: { status: string; conclusion?: string }) {
-  const effective = conclusion || status
-  const map: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
-    queued: { color: 'attention.fg', icon: <HourglassIcon size={14} />, text: 'Queued' },
-    in_progress: { color: 'accent.fg', icon: <Spinner size="small" />, text: 'Running' },
-    success: { color: 'success.fg', icon: <CheckCircleFillIcon size={14} />, text: 'Success' },
-    failure: { color: 'danger.fg', icon: <XCircleFillIcon size={14} />, text: 'Failed' },
-    cancelled: { color: 'fg.muted', icon: <SkipFillIcon size={14} />, text: 'Cancelled' },
-    skipped: { color: 'fg.muted', icon: <SkipFillIcon size={14} />, text: 'Skipped' },
-    requested: { color: 'attention.fg', icon: <ClockIcon size={14} />, text: 'Requested' },
-    waiting: { color: 'attention.fg', icon: <ClockIcon size={14} />, text: 'Waiting' },
-    action_required: { color: 'attention.fg', icon: <AlertIcon size={14} />, text: 'Action Required' },
-  }
-  const s = map[effective] ?? { color: 'fg.muted', icon: <ClockIcon size={14} />, text: effective }
-
-  return (
-    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, color: s.color }}>
-      {s.icon}
-      <Text sx={{ fontSize: 0 }}>{s.text}</Text>
-    </Box>
-  )
 }
 
 function duration(start?: string, end?: string, status?: string): string {
@@ -58,33 +26,57 @@ function duration(start?: string, end?: string, status?: string): string {
   return `${hr}h ${min % 60}m`
 }
 
+function relativeTime(dateStr: string): string {
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diffMs = now - then
+  const seconds = Math.floor(diffMs / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 function JobRow({ job }: { job: WorkflowJob }) {
   return (
-    <Box
-      as="tr"
-      sx={{
-        '&:hover': { bg: 'canvas.subtle' },
-      }}
-    >
-      <Box as="td" sx={{ p: 2, pl: 5, fontSize: 0 }} title={job.name}>
+    <tr className="border-t border-gray-800/50 hover:bg-gray-800/30">
+      <td className="py-2 pl-10 pr-3 text-sm">
         {job.html_url ? (
-          <Link href={job.html_url} target="_blank" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+          <a
+            href={job.html_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-indigo-400 hover:text-indigo-300"
+          >
             {truncate(job.name)}
-          </Link>
-        ) : truncate(job.name)}
-      </Box>
-      <Box as="td" sx={{ p: 2, fontSize: 0 }}>
+          </a>
+        ) : (
+          <span className="text-gray-300">{truncate(job.name)}</span>
+        )}
+      </td>
+      <td className="py-2 px-3">
         <StatusBadge status={job.status} conclusion={job.conclusion} />
-      </Box>
-      <Box as="td" sx={{ p: 2, fontSize: 0 }}>
-        {job.labels?.map((label) => (
-          <Label key={label} sx={{ mr: 1 }}>{label}</Label>
-        )) || '-'}
-      </Box>
-      <Box as="td" sx={{ p: 2, fontSize: 0 }}>
+      </td>
+      <td className="py-2 px-3">
+        <div className="flex flex-wrap gap-1">
+          {job.labels?.map((label) => (
+            <span
+              key={label}
+              className="inline-block rounded-md bg-gray-800 px-2 py-0.5 text-xs text-gray-400"
+            >
+              {label}
+            </span>
+          )) || <span className="text-gray-600">-</span>}
+        </div>
+      </td>
+      <td className="py-2 px-3 text-sm tabular-nums text-gray-400">
         {duration(job.started_at, job.completed_at, job.status)}
-      </Box>
-    </Box>
+      </td>
+    </tr>
   )
 }
 
@@ -104,83 +96,74 @@ function RunRow({ run, refresh }: { run: WorkflowRun; refresh: number }) {
 
   return (
     <>
-      <Box
-        as="tr"
-        sx={{ cursor: 'pointer', '&:hover': { bg: 'canvas.subtle' } }}
+      <tr
+        className="cursor-pointer border-t border-gray-800 transition-colors hover:bg-gray-800/50"
         onClick={() => setExpanded((e) => !e)}
       >
-        <Box as="td" sx={{ p: 2, width: 24 }}>
-          {expanded ? <ChevronDownIcon size={16} /> : <ChevronRightIcon size={16} />}
-        </Box>
-        <Box as="td" sx={{ p: 2, fontSize: 1 }}>
-          <Link href={run.html_url} target="_blank" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-            {run.id}
-          </Link>
-        </Box>
-        <Box as="td" sx={{ p: 2, fontSize: 1 }} title={run.name}>
+        <td className="w-8 py-3 pl-4 pr-1 text-gray-500">
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </td>
+        <td className="py-3 px-3 text-sm">
+          <a
+            href={run.html_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300"
+          >
+            #{run.id}
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </td>
+        <td className="py-3 px-3 text-sm text-gray-200" title={run.name}>
           {truncate(run.name)}
-        </Box>
-        <Box as="td" sx={{ p: 2, fontSize: 0, color: 'fg.muted' }}>
+        </td>
+        <td className="py-3 px-3 text-sm text-gray-500">
           {run.repository_name}
-        </Box>
-        <Box as="td" sx={{ p: 2, fontSize: 0 }} title={run.display_title}>
+        </td>
+        <td className="py-3 px-3 text-sm text-gray-400" title={run.display_title}>
           {truncate(run.display_title)}
-        </Box>
-        <Box as="td" sx={{ p: 2, fontSize: 0 }}>
+        </td>
+        <td className="py-3 px-3">
           <StatusBadge status={run.status} conclusion={run.conclusion} />
-        </Box>
-        <Box as="td" sx={{ p: 2, fontSize: 0 }}>
+        </td>
+        <td className="py-3 px-3 text-sm tabular-nums text-gray-400">
           {duration(run.run_started_at || run.created_at, run.updated_at, run.status)}
-        </Box>
-        <Box as="td" sx={{ p: 2, fontSize: 0, color: 'fg.muted' }}>
-          <RelativeTime date={new Date(run.created_at)} />
-        </Box>
-      </Box>
+        </td>
+        <td className="py-3 px-3 text-sm text-gray-500">
+          {relativeTime(run.created_at)}
+        </td>
+      </tr>
       {expanded && (
-        <Box as="tr">
-          <Box as="td" colSpan={8} sx={{ p: 0 }}>
+        <tr>
+          <td colSpan={8} className="p-0">
             {loading ? (
-              <Box sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
-                <Spinner size="small" />
-              </Box>
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+              </div>
             ) : jobs.length === 0 ? (
-              <Box sx={{ p: 3 }}>
-                <Text sx={{ color: 'fg.muted', fontSize: 0 }}>No jobs found</Text>
-              </Box>
+              <div className="py-4 text-center text-sm text-gray-600">
+                No jobs found
+              </div>
             ) : (
-              <Box
-                as="table"
-                sx={{
-                  width: '100%',
-                  borderCollapse: 'collapse',
-                  bg: 'canvas.inset',
-                }}
-              >
-                <Box as="thead">
-                  <Box as="tr">
-                    <Box as="th" sx={{ p: 2, pl: 5, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>
-                      Job
-                    </Box>
-                    <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>
-                      Status
-                    </Box>
-                    <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>
-                      Runner
-                    </Box>
-                    <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>
-                      Duration
-                    </Box>
-                  </Box>
-                </Box>
-                <Box as="tbody">
+              <table className="w-full">
+                <thead>
+                  <tr className="text-xs text-gray-500">
+                    <th className="py-2 pl-10 pr-3 text-left font-medium">Job</th>
+                    <th className="py-2 px-3 text-left font-medium">Status</th>
+                    <th className="py-2 px-3 text-left font-medium">Runner</th>
+                    <th className="py-2 px-3 text-left font-medium">Duration</th>
+                  </tr>
+                </thead>
+                <tbody>
                   {jobs.map((j) => (
                     <JobRow key={j.id} job={j} />
                   ))}
-                </Box>
-              </Box>
+                </tbody>
+              </table>
             )}
-          </Box>
-        </Box>
+          </td>
+        </tr>
       )}
     </>
   )
@@ -208,65 +191,75 @@ export function WorkflowTable({ ready, refreshSignal, repo, status }: { ready: b
     load() // eslint-disable-line react-hooks/set-state-in-effect
   }, [load, ready, refreshSignal])
 
-  return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Text sx={{ fontSize: 1, fontWeight: 'bold' }}>
-          Recent Workflow Runs{pagination ? ` (${pagination.total_count} runs)` : ''}
-        </Text>
-        {pagination && pagination.total_pages > 1 && (
-          <Pagination
-            pageCount={pagination.total_pages}
-            currentPage={page}
-            onPageChange={(e, p) => { e.preventDefault(); setPage(p) }}
-          />
-        )}
-      </Box>
+  const totalPages = pagination?.total_pages ?? 1
 
-      <Box
-        sx={{
-          border: '1px solid',
-          borderColor: 'border.default',
-          borderRadius: 2,
-          overflow: 'hidden',
-          bg: 'canvas.default',
-        }}
-      >
-        <Box
-          as="table"
-          sx={{ width: '100%', borderCollapse: 'collapse' }}
-        >
-          <Box as="thead" sx={{ bg: 'canvas.subtle' }}>
-            <Box as="tr">
-              <Box as="th" sx={{ p: 2, width: 24 }} />
-              <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>Build</Box>
-              <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>Name</Box>
-              <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>Repository</Box>
-              <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>Title</Box>
-              <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>Status</Box>
-              <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>Duration</Box>
-              <Box as="th" sx={{ p: 2, textAlign: 'left', fontSize: 0, color: 'fg.muted' }}>Created</Box>
-            </Box>
-          </Box>
-          <Box as="tbody">
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-200">
+          Recent Workflow Runs
+          {pagination && (
+            <span className="ml-2 text-xs font-normal text-gray-500">
+              {pagination.total_count} total
+            </span>
+          )}
+        </h3>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="rounded-md px-2.5 py-1 text-xs text-gray-400 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="px-2 text-xs text-gray-500">
+              {page} / {totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-md px-2.5 py-1 text-xs text-gray-400 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-gray-800 bg-gray-900">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-gray-800 bg-gray-800/40 text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="w-8 py-3 pl-4 pr-1" />
+              <th className="py-3 px-3">Build</th>
+              <th className="py-3 px-3">Workflow</th>
+              <th className="py-3 px-3">Repository</th>
+              <th className="py-3 px-3">Title</th>
+              <th className="py-3 px-3">Status</th>
+              <th className="py-3 px-3">Duration</th>
+              <th className="py-3 px-3">Created</th>
+            </tr>
+          </thead>
+          <tbody>
             {loading ? (
-              <Box as="tr">
-                <Box as="td" colSpan={8} sx={{ p: 4, textAlign: 'center' }}>
-                  <Spinner size="medium" />
-                </Box>
-              </Box>
+              <tr>
+                <td colSpan={8} className="py-12 text-center">
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-gray-500" />
+                </td>
+              </tr>
             ) : runs.length === 0 ? (
-              <Box as="tr">
-                <Box as="td" colSpan={8} sx={{ p: 4, textAlign: 'center' }}>
-                  <Text sx={{ color: 'fg.muted' }}>No workflow runs found</Text>
-                </Box>
-              </Box>
+              <tr>
+                <td colSpan={8} className="py-12 text-center text-sm text-gray-600">
+                  No workflow runs found
+                </td>
+              </tr>
             ) : (
               runs.map((run) => <RunRow key={run.id} run={run} refresh={refreshSignal} />)
             )}
-          </Box>
-        </Box>
-      </Box>
-    </Box>
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }

@@ -1,20 +1,37 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { ThemeProvider, BaseStyles, Box, Header, Text, UnderlineNav, FormControl, Select, SelectPanel, Button } from '@primer/react'
-import { MarkGithubIcon, GraphIcon, AlertIcon, ServerIcon } from '@primer/octicons-react'
+import { Search, ChevronDown } from 'lucide-react'
 import { MetricsCards } from './components/MetricsCards'
 import { DemandChart } from './components/DemandChart'
 import { WorkflowTable } from './components/WorkflowTable'
 import { FailureAnalytics } from './components/FailureAnalytics'
 import { LabelDemand } from './components/LabelDemand'
+import { Sidebar } from './components/Sidebar'
 import { useSSE } from './hooks/useSSE'
 import { getMetrics, getRepositories, initCsrf } from './api/client'
-import type { SelectPanelItemInput } from '@primer/react'
 import type { MetricsResponse, Period } from './api/types'
 
-type Tab = 'dashboard' | 'failures' | 'labels'
+type Page = 'dashboard' | 'failures' | 'labels'
+
+const PAGE_TITLES: Record<Page, string> = {
+  dashboard: 'Dashboard',
+  failures: 'Failure Analytics',
+  labels: 'Runner Labels',
+}
+
+const STATUS_OPTIONS = [
+  { id: '', label: 'All statuses' },
+  { id: 'requested', label: 'Requested' },
+  { id: 'in_progress', label: 'In Progress' },
+  { id: 'queued', label: 'Queued' },
+  { id: 'stale', label: 'Stale' },
+  { id: 'success', label: 'Success' },
+  { id: 'failure', label: 'Failed' },
+  { id: 'cancelled', label: 'Cancelled' },
+  { id: 'action_required', label: 'Action Required' },
+]
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+  const [activePage, setActivePage] = useState<Page>('dashboard')
   const [period, setPeriod] = useState<Period>('day')
   const [metricsData, setMetricsData] = useState<MetricsResponse | null>(null)
   const [liveRunning, setLiveRunning] = useState<number | null>(null)
@@ -22,33 +39,18 @@ export default function App() {
   const [ready, setReady] = useState(false)
   const [selectedRepo, setSelectedRepo] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
-  const [repoItems, setRepoItems] = useState<{ id: string; text: string }[]>([])
-  const [repoPanelOpen, setRepoPanelOpen] = useState(false)
-  const [repoFilter, setRepoFilter] = useState('')
-  const STATUS_OPTIONS = [
-    { id: '', label: 'All statuses' },
-    { id: 'requested', label: 'Requested' },
-    { id: 'in_progress', label: 'In Progress' },
-    { id: 'queued', label: 'Queued' },
-    { id: 'stale', label: 'Stale' },
-    { id: 'success', label: 'Success' },
-    { id: 'failure', label: 'Failed' },
-    { id: 'cancelled', label: 'Cancelled' },
-    { id: 'action_required', label: 'Action Required' },
-  ]
+  const [repos, setRepos] = useState<string[]>([])
+  const [repoSearchOpen, setRepoSearchOpen] = useState(false)
+  const [repoSearch, setRepoSearch] = useState('')
 
-  // Initialize CSRF token before making API calls
   useEffect(() => {
     initCsrf().then(() => setReady(true))
   }, [])
 
-  // Fetch repository list for autocomplete
   useEffect(() => {
     if (!ready) return
     getRepositories()
-      .then((r) => setRepoItems(
-        r.repositories.map((name) => ({ id: name, text: name }))
-      ))
+      .then((r) => setRepos(r.repositories))
       .catch((err) => console.error('Failed to load repositories', err))
   }, [ready])
 
@@ -70,7 +72,7 @@ export default function App() {
 
   const [workflowRefresh, setWorkflowRefresh] = useState(0)
 
-  useSSE({
+  const { connected } = useSSE({
     onMetricsUpdate: (data) => {
       setLiveRunning(data.running_jobs)
       setLiveQueued(data.queued_jobs)
@@ -86,159 +88,124 @@ export default function App() {
   const avgRunTime = metricsData?.current_metrics?.avg_run_time ?? 0
   const peakDemand = metricsData?.current_metrics?.peak_demand ?? 0
 
-  const filteredRepoItems = useMemo(() => {
-    const allRepos = [{ id: '', text: 'All repositories' }, ...repoItems]
-    if (!repoFilter) return allRepos
-    const lower = repoFilter.toLowerCase()
-    return allRepos.filter((r) => r.text.toLowerCase().includes(lower))
-  }, [repoItems, repoFilter])
-
-  const selectedRepoItem = useMemo(
-    () => (selectedRepo ? { id: selectedRepo, text: selectedRepo } : { id: '', text: 'All repositories' }),
-    [selectedRepo],
-  )
-
-  const repoFilterBox = (
-    <FormControl>
-      <FormControl.Label sx={{ mb: 2 }}>Filter by repository</FormControl.Label>
-      <SelectPanel
-        title="Filter by repository"
-        placeholder="Search repositories..."
-        open={repoPanelOpen}
-        onOpenChange={(open) => {
-          setRepoPanelOpen(open)
-          if (!open) setRepoFilter('')
-        }}
-        items={filteredRepoItems}
-        selected={selectedRepoItem}
-        onSelectedChange={(item: SelectPanelItemInput | undefined) => {
-          if (!item || item.id === '') {
-            setSelectedRepo('')
-          } else {
-            setSelectedRepo(String(item.id))
-          }
-          setRepoPanelOpen(false)
-          setRepoFilter('')
-        }}
-        filterValue={repoFilter}
-        onFilterChange={setRepoFilter}
-        renderAnchor={(props) => (
-          <Button {...props} sx={{ bg: 'canvas.default', '[data-component="text"]': { textAlign: 'left' } }}>
-            {selectedRepo || 'All repositories'}
-          </Button>
-        )}
-        overlayProps={{ width: 'large', sx: { bg: 'canvas.overlay', color: 'fg.default' } }}
-        height="medium"
-      />
-    </FormControl>
-  )
-
-  const repoOnlyFilter = (
-    <Box sx={{ mb: 3, p: 3, bg: 'canvas.default', borderRadius: 2, borderWidth: 1, borderStyle: 'solid', borderColor: 'border.default' }}>
-      {repoFilterBox}
-    </Box>
-  )
-
-  const dashboardFilter = (
-    <Box sx={{ mb: 3, p: 3, bg: 'canvas.default', borderRadius: 2, borderWidth: 1, borderStyle: 'solid', borderColor: 'border.default', display: 'flex', gap: 4, alignItems: 'flex-end' }}>
-      {repoFilterBox}
-      <FormControl sx={{ flex: 1 }}>
-        <FormControl.Label sx={{ mb: 2 }}>Filter by status</FormControl.Label>
-        <Select
-          value={selectedStatus}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedStatus(e.target.value)}
-          sx={{ bg: 'canvas.default' }}
-        >
-          {STATUS_OPTIONS.map((opt) => (
-            <Select.Option key={opt.id} value={opt.id}>{opt.label}</Select.Option>
-          ))}
-        </Select>
-      </FormControl>
-    </Box>
-  )
+  const filteredRepos = useMemo(() => {
+    if (!repoSearch) return repos
+    const lower = repoSearch.toLowerCase()
+    return repos.filter((r) => r.toLowerCase().includes(lower))
+  }, [repos, repoSearch])
 
   return (
-    <ThemeProvider colorMode="auto">
-      <BaseStyles>
-        <Box sx={{ minHeight: '100vh', bg: 'canvas.inset', color: 'fg.default' }}>
-          <Header>
-            <Header.Item>
-              <Header.Link href="/" sx={{ fontSize: 2, fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 2 }}>
-                <MarkGithubIcon size={24} />
-                Live Actions
-              </Header.Link>
-            </Header.Item>
-            <Header.Item full />
-            <Header.Item>
-              <Text sx={{ fontSize: 0, color: 'header.text' }}>Runner Monitoring</Text>
-            </Header.Item>
-          </Header>
+    <div className="flex min-h-screen">
+      <Sidebar activePage={activePage} onNavigate={setActivePage} connected={connected} />
 
-          <Box sx={{ maxWidth: 1280, mx: 'auto', px: [3, 4], py: 4 }}>
-            <UnderlineNav aria-label="Main navigation" sx={{ mb: 4 }}>
-              <UnderlineNav.Item
-                aria-current={activeTab === 'dashboard' ? 'page' : undefined}
-                onSelect={() => setActiveTab('dashboard')}
-                icon={GraphIcon}
+      {/* Main content */}
+      <main className="ml-56 flex-1 min-h-screen">
+        {/* Page header */}
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-800 bg-gray-950/80 px-6 backdrop-blur-sm">
+          <h1 className="text-base font-semibold text-white">{PAGE_TITLES[activePage]}</h1>
+
+          {/* Filters */}
+          <div className="flex items-center gap-3">
+            {/* Repository filter */}
+            <div className="relative">
+              <button
+                onClick={() => setRepoSearchOpen(!repoSearchOpen)}
+                className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-300 hover:border-gray-600 transition-colors"
               >
-                Dashboard
-              </UnderlineNav.Item>
-              <UnderlineNav.Item
-                aria-current={activeTab === 'failures' ? 'page' : undefined}
-                onSelect={() => setActiveTab('failures')}
-                icon={AlertIcon}
+                <Search className="h-3.5 w-3.5 text-gray-500" />
+                <span className="max-w-[140px] truncate">{selectedRepo || 'All repositories'}</span>
+                <ChevronDown className="h-3 w-3 text-gray-500" />
+              </button>
+
+              {repoSearchOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => { setRepoSearchOpen(false); setRepoSearch('') }} />
+                  <div className="absolute right-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow-xl">
+                    <div className="border-b border-gray-700 p-2">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Search repositories..."
+                        value={repoSearch}
+                        onChange={(e) => setRepoSearch(e.target.value)}
+                        className="w-full rounded-md border border-gray-600 bg-gray-900 px-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="max-h-48 overflow-y-auto py-1">
+                      <button
+                        onClick={() => { setSelectedRepo(''); setRepoSearchOpen(false); setRepoSearch('') }}
+                        className="w-full px-3 py-1.5 text-left text-xs text-gray-300 hover:bg-gray-700"
+                      >
+                        All repositories
+                      </button>
+                      {filteredRepos.map((r) => (
+                        <button
+                          key={r}
+                          onClick={() => { setSelectedRepo(r); setRepoSearchOpen(false); setRepoSearch('') }}
+                          className="w-full px-3 py-1.5 text-left text-xs text-gray-300 hover:bg-gray-700"
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Status filter (dashboard only) */}
+            {activePage === 'dashboard' && (
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="rounded-lg border border-gray-700 bg-gray-800 px-3 py-1.5 text-xs text-gray-300 outline-none hover:border-gray-600 focus:border-indigo-500 transition-colors"
               >
-                Failure Analytics
-              </UnderlineNav.Item>
-              <UnderlineNav.Item
-                aria-current={activeTab === 'labels' ? 'page' : undefined}
-                onSelect={() => setActiveTab('labels')}
-                icon={ServerIcon}
-              >
-                Runner Labels
-              </UnderlineNav.Item>
-            </UnderlineNav>
-
-            {activeTab === 'dashboard' && (
-              <>
-                <MetricsCards
-                  running={running}
-                  queued={queued}
-                  avgQueueTime={avgQueueTime}
-                  avgRunTime={avgRunTime}
-                  peakDemand={peakDemand}
-                />
-
-                <DemandChart
-                  data={metricsData}
-                  period={period}
-                  onPeriodChange={(p) => {
-                    setPeriod(p)
-                    loadMetrics(p)
-                  }}
-                />
-
-                {dashboardFilter}
-                <WorkflowTable key={`${selectedRepo}:${selectedStatus}`} ready={ready} refreshSignal={workflowRefresh} repo={selectedRepo} status={selectedStatus} />
-              </>
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{opt.label}</option>
+                ))}
+              </select>
             )}
+          </div>
+        </header>
 
-            {activeTab === 'failures' && (
-              <>
-                {repoOnlyFilter}
-                <FailureAnalytics ready={ready} repo={selectedRepo} />
-              </>
-            )}
+        {/* Page content */}
+        <div className="p-6">
+          {activePage === 'dashboard' && (
+            <div className="space-y-6">
+              <MetricsCards
+                running={running}
+                queued={queued}
+                avgQueueTime={avgQueueTime}
+                avgRunTime={avgRunTime}
+                peakDemand={peakDemand}
+              />
+              <DemandChart
+                data={metricsData}
+                period={period}
+                onPeriodChange={(p) => {
+                  setPeriod(p)
+                  loadMetrics(p)
+                }}
+              />
+              <WorkflowTable
+                key={`${selectedRepo}:${selectedStatus}`}
+                ready={ready}
+                refreshSignal={workflowRefresh}
+                repo={selectedRepo}
+                status={selectedStatus}
+              />
+            </div>
+          )}
 
-            {activeTab === 'labels' && (
-              <>
-                {repoOnlyFilter}
-                <LabelDemand ready={ready} repo={selectedRepo} />
-              </>
-            )}
-          </Box>
-        </Box>
-      </BaseStyles>
-    </ThemeProvider>
+          {activePage === 'failures' && (
+            <FailureAnalytics ready={ready} repo={selectedRepo} />
+          )}
+
+          {activePage === 'labels' && (
+            <LabelDemand ready={ready} repo={selectedRepo} />
+          )}
+        </div>
+      </main>
+    </div>
   )
 }
