@@ -21,14 +21,14 @@ Real-time monitoring for GitHub Actions workflows and runners. A single self-con
 - Configurable tracking for GitHub-hosted vs self-hosted runners
 - Visual status for queued, running, completed, and failed jobs
 
-![Dashboard](images/dashboard-v2.png)
+![Dashboard](images/dashboard-v3.png)
 
 #### **📋 Workflow Runs Management**
 - Complete history of recent workflow executions with pagination
 - Click to view individual job information for each workflow run
 - Real-time status updates (queued, in_progress, completed, failed)
 
-![Workflows](images/workflows-v2.png)
+![Workflows](images/workflows-v3.png)
 
 #### **🔴 Failure Analytics**
 - Failure rate tracking with total failures, cancellations, and failure percentage
@@ -150,7 +150,7 @@ Update your GitHub webhook URL to the ngrok HTTPS URL (e.g., `https://a1b2c3d4.n
 Live Actions is a single Go binary with all assets embedded:
 
 - **Database**: SQLite (stored at `DATABASE_PATH`, default `./data/live-actions.db`)
-- **Frontend**: React + Primer (embedded via `go:embed`)
+- **Frontend**: React + Tailwind (embedded via `go:embed`)
 - **Metrics**: `/metrics` endpoint for external Prometheus scraping; charts powered by internal SQLite snapshots
 
 No external services required.
