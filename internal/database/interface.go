@@ -27,6 +27,7 @@ type DatabaseInterface interface {
 
 	// Webhook Events
 	StoreWebhookEvent(ctx context.Context, event *models.OrderedEvent) error
+	StoreWebhookEvents(ctx context.Context, events []*models.OrderedEvent) error
 	GetPendingEventsGrouped(ctx context.Context, limit int) ([]*models.OrderedEvent, error)
 	GetPendingEventsByAge(ctx context.Context, maxAge time.Duration, limit int) ([]*models.OrderedEvent, error)
 	MarkEventProcessed(ctx context.Context, deliveryID string) error

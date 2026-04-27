@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gateixeira/live-actions/internal/config"
+	"github.com/gateixeira/live-actions/internal/services"
 	"github.com/gateixeira/live-actions/models"
 	"github.com/gateixeira/live-actions/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -233,6 +234,13 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 		}
 
 		if err := h.orderingService.AddEvent(orderedEvent); err != nil {
+			if errors.Is(err, services.ErrIngestQueueFull) {
+				logger.Logger.Error("Webhook ingest queue full; rejecting delivery",
+					zap.String("delivery_id", deliveryID),
+					zap.String("event_type", eventTypeStr))
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Server overloaded; manual redelivery required"})
+				return
+			}
 			logger.Logger.Error("Failed to add event to ordering service", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process event"})
 			return

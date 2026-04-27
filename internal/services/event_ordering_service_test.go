@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -60,50 +61,90 @@ func TestEventOrderingService_AddEvent(t *testing.T) {
 	setupTestLoggerForEventOrdering()
 	defer logger.SyncLogger()
 
-	tests := []struct {
-		name          string
-		event         *models.OrderedEvent
-		mockSetup     func(*database.MockDatabase)
-		expectedError bool
-	}{
-		{
-			name:  "successful event storage",
-			event: createTestEvent("delivery-1", "workflow_job", "job-123", 1),
-			mockSetup: func(m *database.MockDatabase) {
-				m.On("StoreWebhookEvent", mock.Anything, mock.AnythingOfType("*models.OrderedEvent")).Return(nil)
-			},
-			expectedError: false,
-		},
-		{
-			name:  "database error",
-			event: createTestEvent("delivery-2", "workflow_job", "job-456", 2),
-			mockSetup: func(m *database.MockDatabase) {
-				m.On("StoreWebhookEvent", mock.Anything, mock.AnythingOfType("*models.OrderedEvent")).Return(errors.New("database error"))
-			},
-			expectedError: true,
-		},
-	}
+	t.Run("enqueues event onto ingest channel without DB write", func(t *testing.T) {
+		mockDB := new(database.MockDatabase)
+		// AddEvent is now a channel send; it must NOT touch the DB synchronously.
+		// We deliberately do not wire StoreWebhookEvents here so that any
+		// synchronous DB call would fail the test.
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockDB := new(database.MockDatabase)
-			tt.mockSetup(mockDB)
-
-			service := NewEventOrderingService(mockDB, func(event *models.OrderedEvent) error {
-				return nil
-			})
-
-			err := service.AddEvent(tt.event)
-
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			mockDB.AssertExpectations(t)
+		service := NewEventOrderingService(mockDB, func(event *models.OrderedEvent) error {
+			return nil
 		})
+
+		err := service.AddEvent(createTestEvent("delivery-1", "workflow_job", "job-123", 1))
+		assert.NoError(t, err)
+
+		// Event should be sitting in the channel waiting for the ingest worker.
+		assert.Equal(t, 1, len(service.ingestCh))
+		mockDB.AssertNotCalled(t, "StoreWebhookEvent", mock.Anything, mock.Anything)
+		mockDB.AssertNotCalled(t, "StoreWebhookEvents", mock.Anything, mock.Anything)
+	})
+
+	t.Run("returns ErrIngestQueueFull when channel saturated", func(t *testing.T) {
+		mockDB := new(database.MockDatabase)
+		service := NewEventOrderingService(mockDB, func(event *models.OrderedEvent) error {
+			return nil
+		})
+		// Shrink channel + timeout to make the saturation path observable in tests.
+		service.ingestCh = make(chan *models.OrderedEvent, 1)
+		service.enqueueTimeout = 20 * time.Millisecond
+
+		// Fill the channel.
+		assert.NoError(t, service.AddEvent(createTestEvent("d-1", "workflow_job", "k", 1)))
+
+		// Next AddEvent must time out and surface ErrIngestQueueFull.
+		err := service.AddEvent(createTestEvent("d-2", "workflow_job", "k", 1))
+		assert.ErrorIs(t, err, ErrIngestQueueFull)
+	})
+
+	t.Run("returns context error when service stopped", func(t *testing.T) {
+		mockDB := new(database.MockDatabase)
+		service := NewEventOrderingService(mockDB, func(event *models.OrderedEvent) error {
+			return nil
+		})
+		service.ingestCh = make(chan *models.OrderedEvent, 1)
+		service.enqueueTimeout = time.Second
+
+		// Fill, then cancel the service so the second send observes ctx.Done().
+		assert.NoError(t, service.AddEvent(createTestEvent("d-1", "workflow_job", "k", 1)))
+		service.cancel()
+
+		err := service.AddEvent(createTestEvent("d-2", "workflow_job", "k", 1))
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+}
+
+// TestEventOrderingService_IngestWorker_BatchesInserts asserts that events
+// pushed via AddEvent are persisted via StoreWebhookEvents (the batched call)
+// rather than per-event StoreWebhookEvent.
+func TestEventOrderingService_IngestWorker_BatchesInserts(t *testing.T) {
+	setupTestLoggerForEventOrdering()
+	defer logger.SyncLogger()
+
+	mockDB := new(database.MockDatabase)
+	mockDB.On("StoreWebhookEvents", mock.Anything, mock.MatchedBy(func(events []*models.OrderedEvent) bool {
+		return len(events) >= 1
+	})).Return(nil).Maybe()
+	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.Anything, mock.Anything).Return([]*models.OrderedEvent{}, nil).Maybe()
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
+
+	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error { return nil })
+	service.ingestBatchWait = 10 * time.Millisecond
+	service.flushInterval = time.Hour // keep the flush worker out of the way
+	service.Start()
+
+	for i := 0; i < 5; i++ {
+		assert.NoError(t, service.AddEvent(createTestEvent(
+			"d-"+string(rune('0'+i)), "workflow_job", "k", 1)))
 	}
+
+	// Wait for the batch ticker to fire at least once.
+	time.Sleep(60 * time.Millisecond)
+	service.Stop()
+
+	// Verify StoreWebhookEvents was called and the legacy per-event method was not.
+	mockDB.AssertCalled(t, "StoreWebhookEvents", mock.Anything, mock.Anything)
+	mockDB.AssertNotCalled(t, "StoreWebhookEvent", mock.Anything, mock.Anything)
 }
 
 func TestEventOrderingService_StartStop(t *testing.T) {
@@ -403,7 +444,7 @@ func TestEventOrderingService_ConcurrentAccess(t *testing.T) {
 	mockDB := new(database.MockDatabase)
 
 	// Allow multiple calls to database methods
-	mockDB.On("StoreWebhookEvent", mock.Anything, mock.AnythingOfType("*models.OrderedEvent")).Return(nil).Maybe()
+	mockDB.On("StoreWebhookEvents", mock.Anything, mock.AnythingOfType("[]*models.OrderedEvent")).Return(nil).Maybe()
 	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.AnythingOfType("time.Duration"), mock.AnythingOfType("int")).Return([]*models.OrderedEvent{}, nil).Maybe()
 	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
 
