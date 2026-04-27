@@ -90,8 +90,6 @@ func TestWorkflowJobHandler_HandleEvent_Success(t *testing.T) {
 			job.RunID == 67890
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
-	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(1, 2, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -156,8 +154,6 @@ func TestWorkflowJobHandler_HandleEvent_DatabaseGetJobError(t *testing.T) {
 			job.Status == models.JobStatus("queued")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
-	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(0, 1, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -285,8 +281,6 @@ func TestWorkflowJobHandler_HandleEvent_DifferentActions(t *testing.T) {
 					job.Status == tc.expectedStatus
 			}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
-			// Set up mock expectations for metrics update
-			mockDB.On("GetCurrentJobCounts", mock.Anything).Return(1, 0, nil)
 
 			// Execute the handler
 			err = handler.HandleEvent(eventData, sequence)
@@ -371,8 +365,6 @@ func TestWorkflowJobHandler_HandleEvent_StatusTransitions(t *testing.T) {
 					job.Status == tc.expectedStatus
 			}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
-			// Set up mock expectations for metrics update
-			mockDB.On("GetCurrentJobCounts", mock.Anything).Return(1, 0, nil)
 
 			// Execute the handler
 			err = handler.HandleEvent(eventData, sequence)
@@ -429,8 +421,6 @@ func TestWorkflowJobHandler_HandleEvent_WithStartedAtTime(t *testing.T) {
 			job.Status == models.JobStatus("in_progress")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
-	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(1, 0, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -439,54 +429,6 @@ func TestWorkflowJobHandler_HandleEvent_WithStartedAtTime(t *testing.T) {
 	assert.NoError(t, err, "HandleEvent should not return an error")
 	assert.Equal(t, startedAt.Unix(), capturedJob.StartedAt.Unix(), "StartedAt should be preserved")
 	assert.Equal(t, createdAt.Unix(), capturedJob.CreatedAt.Unix(), "CreatedAt should be preserved")
-	mockDB.AssertExpectations(t)
-}
-
-func TestWorkflowJobHandler_HandleEvent_GetCurrentJobCountsError(t *testing.T) {
-	mockDB, testConfig := setupWorkflowJobTest()
-	handler := NewWorkflowJobHandler(testConfig, mockDB)
-
-	now := time.Now()
-	sequence := &models.EventSequence{
-		EventID:    "event123",
-		SequenceID: 1,
-		Timestamp:  now,
-		DeliveryID: "delivery123",
-		ReceivedAt: now,
-	}
-
-	workflowJobEvent := models.WorkflowJobEvent{
-		Action: "completed",
-		WorkflowJob: models.WorkflowJob{
-			ID:          12345,
-			Name:        "Test Job",
-			Status:      models.JobStatusInProgress,
-			Labels:      []string{"ubuntu-latest"},
-			Conclusion:  "success",
-			CreatedAt:   now,
-			CompletedAt: now,
-			RunID:       67890,
-		},
-	}
-
-	eventData, err := json.Marshal(workflowJobEvent)
-	assert.NoError(t, err, "Should be able to marshal test data")
-
-	// Set up mock expectations
-	mockDB.On("GetWorkflowJobByID", mock.Anything, int64(12345)).Return(models.WorkflowJob{
-		Status: models.JobStatusInProgress,
-	}, nil)
-
-	mockDB.On("AddOrUpdateJob", mock.Anything, mock.AnythingOfType("models.WorkflowJob"), mock.AnythingOfType("time.Time")).Return(true, nil)
-
-	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(0, 0, errors.New("database error"))
-
-	// Execute the handler
-	err = handler.HandleEvent(eventData, sequence)
-
-	// Should not return error when GetCurrentJobCounts fails
-	assert.NoError(t, err, "HandleEvent should not return an error when metrics update fails")
 	mockDB.AssertExpectations(t)
 }
 
@@ -543,8 +485,6 @@ func TestWorkflowJobHandler_HandleEvent_MinimalRequiredFields(t *testing.T) {
 			job.Status == models.JobStatus("queued")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
-	// Set up mock expectations for metrics update
-	mockDB.On("GetCurrentJobCounts", mock.Anything).Return(0, 1, nil)
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)

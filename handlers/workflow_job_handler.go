@@ -88,32 +88,8 @@ func (h *WorkflowJobHandler) HandleEvent(eventData []byte, sequence *models.Even
 	// Handle state transitions correctly
 	h.handleJobStatusTransition(previousJob.Status, event.WorkflowJob.Status, event.WorkflowJob)
 
-	h.sendMetricsUpdate()
-
 	logger.Logger.Debug("Event handled successfully", zap.String("event_type", h.GetEventType()))
 	return nil
-}
-
-func (h *WorkflowJobHandler) sendMetricsUpdate() {
-	// Query database for current job counts
-	running, queued, err := h.db.GetCurrentJobCounts(context.TODO())
-	if err != nil {
-		logger.Logger.Error("Failed to query current job counts", zap.Error(err))
-		return
-	}
-
-	// Convert to the expected format for SSE
-	metricsUpdate := models.MetricsUpdateEvent{
-		RunningJobs: running,
-		QueuedJobs:  queued,
-		Timestamp:   time.Now().Format(time.RFC3339),
-	}
-
-	logger.Logger.Debug("Sending metrics update",
-		zap.Int("running_jobs", metricsUpdate.RunningJobs),
-		zap.Int("queued_jobs", metricsUpdate.QueuedJobs))
-
-	SendMetricsUpdate(metricsUpdate)
 }
 
 // handleJobStatusTransition manages state transitions correctly between job statuses
