@@ -18,6 +18,7 @@ import (
 )
 
 func setupSSETest() {
+	stopLeakedSSECoalescer()
 	// Initialize logger for tests
 	logger.InitLogger("error")
 	gin.SetMode(gin.TestMode)

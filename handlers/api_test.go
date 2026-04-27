@@ -20,6 +20,7 @@ import (
 )
 
 func setupAPITest() (*gin.Engine, *database.MockDatabase, *config.Config) {
+	stopLeakedSSECoalescer()
 	// Initialize logger for tests
 	logger.InitLogger("error")
 

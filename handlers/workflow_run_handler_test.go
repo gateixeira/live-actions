@@ -14,6 +14,7 @@ import (
 )
 
 func setupWorkflowRunTest() *database.MockDatabase {
+	stopLeakedSSECoalescer()
 	// Initialize logger for tests
 	logger.InitLogger("error")
 
