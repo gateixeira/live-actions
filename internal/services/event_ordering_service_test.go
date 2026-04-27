@@ -50,9 +50,9 @@ func TestNewEventOrderingService(t *testing.T) {
 	assert.NotNil(t, service)
 	assert.Equal(t, mockDB, service.db)
 	assert.NotNil(t, service.processFunc)
-	assert.Equal(t, 5*time.Second, service.flushInterval)
+	assert.Equal(t, 1*time.Second, service.flushInterval)
 	assert.Equal(t, 10*time.Second, service.maxAge)
-	assert.Equal(t, 100, service.batchSize)
+	assert.Equal(t, 500, service.batchSize)
 	assert.NotNil(t, service.ctx)
 	assert.NotNil(t, service.cancel)
 }
@@ -202,7 +202,7 @@ func TestEventOrderingService_flushReadyEvents(t *testing.T) {
 		{
 			name: "no pending events",
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 100).Return([]*models.OrderedEvent{}, nil)
+				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).Return([]*models.OrderedEvent{}, nil)
 			},
 			expectedLogs: 0,
 		},
@@ -213,14 +213,14 @@ func TestEventOrderingService_flushReadyEvents(t *testing.T) {
 					createTestEvent("delivery-1", "workflow_job", "job-123", 1),
 					createTestEvent("delivery-2", "workflow_job", "job-456", 2),
 				}
-				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 100).Return(events, nil)
+				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).Return(events, nil)
 			},
 			expectedLogs: 2,
 		},
 		{
 			name: "database error",
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 100).Return([]*models.OrderedEvent{}, errors.New("db error"))
+				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).Return([]*models.OrderedEvent{}, errors.New("db error"))
 			},
 			expectedLogs: 0,
 		},
@@ -255,6 +255,76 @@ func TestEventOrderingService_flushReadyEvents(t *testing.T) {
 			mockDB.AssertExpectations(t)
 		})
 	}
+}
+
+func TestEventOrderingService_flushReadyEvents_drainsBacklogAcrossIterations(t *testing.T) {
+	setupTestLoggerForEventOrdering()
+	defer logger.SyncLogger()
+
+	mockDB := new(database.MockDatabase)
+
+	// First two calls return a full batch (forcing the drain loop to keep
+	// going); the third returns a partial batch which terminates the loop.
+	full := func() []*models.OrderedEvent {
+		events := make([]*models.OrderedEvent, 500)
+		for i := 0; i < 500; i++ {
+			events[i] = createTestEvent("d-"+itoa(i), "workflow_job", "k", i)
+		}
+		return events
+	}
+	partial := []*models.OrderedEvent{
+		createTestEvent("d-tail-1", "workflow_job", "k", 0),
+		createTestEvent("d-tail-2", "workflow_job", "k", 1),
+	}
+
+	mockDB.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).
+		Return(full(), nil).Once()
+	mockDB.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).
+		Return(full(), nil).Once()
+	mockDB.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).
+		Return(partial, nil).Once()
+
+	var processed int
+	var mu sync.Mutex
+	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error {
+		mu.Lock()
+		processed++
+		mu.Unlock()
+		return nil
+	})
+
+	service.flushReadyEvents()
+
+	mu.Lock()
+	got := processed
+	mu.Unlock()
+
+	assert.Equal(t, 500+500+2, got, "drain loop should pull batches until DB returns < batchSize")
+	mockDB.AssertExpectations(t)
+}
+
+// itoa is a tiny helper so the test file does not need strconv just for this.
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	neg := false
+	if i < 0 {
+		neg = true
+		i = -i
+	}
+	var buf [20]byte
+	pos := len(buf)
+	for i > 0 {
+		pos--
+		buf[pos] = byte('0' + i%10)
+		i /= 10
+	}
+	if neg {
+		pos--
+		buf[pos] = '-'
+	}
+	return string(buf[pos:])
 }
 
 func TestEventOrderingService_flushAll(t *testing.T) {
@@ -539,9 +609,9 @@ func TestEventOrderingService_CustomConfiguration(t *testing.T) {
 	originalBatchSize := service.batchSize
 
 	// Verify default values
-	assert.Equal(t, 5*time.Second, originalFlushInterval)
+	assert.Equal(t, 1*time.Second, originalFlushInterval)
 	assert.Equal(t, 10*time.Second, originalMaxAge)
-	assert.Equal(t, 100, originalBatchSize)
+	assert.Equal(t, 500, originalBatchSize)
 
 	// Modify configuration
 	service.flushInterval = 2 * time.Second

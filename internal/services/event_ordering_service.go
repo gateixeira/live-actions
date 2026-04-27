@@ -58,9 +58,9 @@ func NewEventOrderingService(db database.DatabaseInterface, processFunc func(*mo
 	return &EventOrderingService{
 		db:               db,
 		processFunc:      processFunc,
-		flushInterval:    5 * time.Second,
+		flushInterval:    1 * time.Second,
 		maxAge:           10 * time.Second,
-		batchSize:        100,
+		batchSize:        500,
 		ingestCh:         make(chan *models.OrderedEvent, defaultIngestChannelSize),
 		ingestBatchSize:  defaultIngestBatchSize,
 		ingestBatchWait:  defaultIngestBatchWait,
@@ -205,20 +205,42 @@ func (s *EventOrderingService) flushWorker() {
 	}
 }
 
+// drainBudget bounds how long flushReadyEvents will keep pulling batches
+// before yielding back to the ticker. This caps mutex/writer monopolisation
+// so the ingest worker keeps its share of the single-writer SQLite pool.
+const drainBudget = 500 * time.Millisecond
+
+// maxDrainIterations is a hard ceiling on how many batches a single tick
+// will pull, guarding against pathological loops if a query keeps returning
+// the configured batchSize.
+const maxDrainIterations = 20
+
 func (s *EventOrderingService) flushReadyEvents() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	events, err := s.db.GetPendingEventsByAge(s.ctx, s.maxAge, s.batchSize)
-	if err != nil {
-		logger.Logger.Error("Failed to fetch pending events", zap.Error(err))
-		return
-	}
-
-	if len(events) > 0 {
+	deadline := time.Now().Add(drainBudget)
+	for i := 0; i < maxDrainIterations; i++ {
+		if s.ctx.Err() != nil {
+			return
+		}
+		events, err := s.db.GetPendingEventsByAge(s.ctx, s.maxAge, s.batchSize)
+		if err != nil {
+			logger.Logger.Error("Failed to fetch pending events", zap.Error(err))
+			return
+		}
+		if len(events) == 0 {
+			return
+		}
 		logger.Logger.Debug("Processing batch of pending events",
-			zap.Int("count", len(events)))
+			zap.Int("count", len(events)),
+			zap.Int("iteration", i))
 		s.processEvents(events)
+
+		// Stop early when the backlog is drained or our time slice is up.
+		if len(events) < s.batchSize || time.Now().After(deadline) {
+			return
+		}
 	}
 }
 
@@ -227,19 +249,28 @@ func (s *EventOrderingService) flushAll() {
 	defer s.mutex.Unlock()
 
 	// Use a fresh context: s.ctx is already cancelled at this point.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	events, err := s.db.GetPendingEventsGrouped(ctx, 1000)
-	if err != nil {
-		logger.Logger.Error("Failed to fetch all pending events", zap.Error(err))
-		return
-	}
-
-	if len(events) > 0 {
+	for {
+		if ctx.Err() != nil {
+			logger.Logger.Warn("flushAll deadline reached with events still pending")
+			return
+		}
+		events, err := s.db.GetPendingEventsGrouped(ctx, 1000)
+		if err != nil {
+			logger.Logger.Error("Failed to fetch all pending events", zap.Error(err))
+			return
+		}
+		if len(events) == 0 {
+			return
+		}
 		logger.Logger.Debug("Processing all pending events",
 			zap.Int("count", len(events)))
 		s.processEvents(events)
+		if len(events) < 1000 {
+			return
+		}
 	}
 }
 

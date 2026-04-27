@@ -258,11 +258,9 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 }
 
 func (h *WebhookHandler) processOrderedEvent(event *models.OrderedEvent) error {
-
-	if err := h.db.StoreWebhookEvent(context.TODO(), event); err != nil {
-		logger.Logger.Error("Failed to store webhook event", zap.Error(err))
-		//log and continue
-	}
+	// The row already exists in webhook_events: it was inserted by the
+	// ingest worker before this event reached processFunc. Re-upserting
+	// here was an unnecessary write per event under load.
 
 	handler, exists := h.handlers[event.EventType]
 
