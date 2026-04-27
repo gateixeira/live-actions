@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Search, ChevronDown } from 'lucide-react'
 import { MetricsCards } from './components/MetricsCards'
 import { DemandChart } from './components/DemandChart'
@@ -7,6 +7,7 @@ import { FailureAnalytics } from './components/FailureAnalytics'
 import { LabelDemand } from './components/LabelDemand'
 import { Sidebar } from './components/Sidebar'
 import { useSSE } from './hooks/useSSE'
+import { useThrottledLive } from './hooks/useThrottledLive'
 import { getMetrics, getRepositories, initCsrf } from './api/client'
 import type { MetricsResponse, Period } from './api/types'
 
@@ -34,14 +35,32 @@ export default function App() {
   const [activePage, setActivePage] = useState<Page>('dashboard')
   const [period, setPeriod] = useState<Period>('day')
   const [metricsData, setMetricsData] = useState<MetricsResponse | null>(null)
-  const [liveRunning, setLiveRunning] = useState<number | null>(null)
-  const [liveQueued, setLiveQueued] = useState<number | null>(null)
   const [ready, setReady] = useState(false)
   const [selectedRepo, setSelectedRepo] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
   const [repos, setRepos] = useState<string[]>([])
   const [repoSearchOpen, setRepoSearchOpen] = useState(false)
   const [repoSearch, setRepoSearch] = useState('')
+
+  // Pause UI updates while the user is interacting with the dashboard
+  // content (hovering, focusing inputs, expanding rows, etc.). Updates
+  // continue to be captured in the background; they are committed when
+  // interaction ends or on the next 30s tick.
+  const [interacting, setInteracting] = useState(false)
+
+  // Live values from SSE are buffered and committed at most every 30s. They
+  // do not trigger a re-render on every event, so the table can be browsed
+  // without flicker.
+  const [liveRunning, setLiveRunningLatest] = useThrottledLive<number | null>(null, {
+    paused: interacting,
+  })
+  const [liveQueued, setLiveQueuedLatest] = useThrottledLive<number | null>(null, {
+    paused: interacting,
+  })
+  const [workflowRefresh, bumpWorkflowRefresh] = useThrottledLive<number>(0, {
+    paused: interacting,
+  })
+  const workflowRefreshTickRef = useRef(0)
 
   useEffect(() => {
     initCsrf().then(() => setReady(true))
@@ -70,15 +89,14 @@ export default function App() {
     return () => clearInterval(interval)
   }, [period, loadMetrics, ready])
 
-  const [workflowRefresh, setWorkflowRefresh] = useState(0)
-
   const { connected } = useSSE({
     onMetricsUpdate: (data) => {
-      setLiveRunning(data.running_jobs)
-      setLiveQueued(data.queued_jobs)
+      setLiveRunningLatest(data.running_jobs)
+      setLiveQueuedLatest(data.queued_jobs)
     },
     onWorkflowUpdate: () => {
-      setWorkflowRefresh((r) => r + 1)
+      workflowRefreshTickRef.current += 1
+      bumpWorkflowRefresh(workflowRefreshTickRef.current)
     },
   })
 
@@ -187,13 +205,25 @@ export default function App() {
                   loadMetrics(p)
                 }}
               />
-              <WorkflowTable
-                key={`${selectedRepo}:${selectedStatus}`}
-                ready={ready}
-                refreshSignal={workflowRefresh}
-                repo={selectedRepo}
-                status={selectedStatus}
-              />
+              <div
+                onMouseEnter={() => setInteracting(true)}
+                onMouseLeave={() => setInteracting(false)}
+                onFocusCapture={() => setInteracting(true)}
+                onBlurCapture={(e) => {
+                  // Only un-pause when focus leaves the table region entirely.
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                    setInteracting(false)
+                  }
+                }}
+              >
+                <WorkflowTable
+                  key={`${selectedRepo}:${selectedStatus}`}
+                  ready={ready}
+                  refreshSignal={workflowRefresh}
+                  repo={selectedRepo}
+                  status={selectedStatus}
+                />
+              </div>
             </div>
           )}
 
