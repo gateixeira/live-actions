@@ -62,7 +62,7 @@ func SetupAndRun(staticFS embed.FS) {
 	ctx := context.Background()
 
 	cleanupService := services.NewCleanupService(cfg, db, ctx)
-	metricsService := services.NewMetricsUpdateService(db, 10*time.Second, ctx)
+	metricsService := services.NewMetricsUpdateService(db, 2*time.Second, ctx)
 
 	handlers.InitSSEHandler()
 	sseHandler := handlers.GetSSEHandler()
