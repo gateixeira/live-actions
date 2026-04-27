@@ -49,12 +49,17 @@ type DatabaseInterface interface {
 	GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJobCount, error)
 }
 
-// DBWrapper wraps the actual DB instance and implements DatabaseInterface
+// DBWrapper wraps separate read and write *sql.DB handles to the same SQLite
+// file and implements DatabaseInterface. Splitting the pools lets WAL readers
+// run concurrently with the (single) writer instead of being serialized
+// behind it.
 type DBWrapper struct {
-	db *sql.DB
+	writeDB *sql.DB
+	readDB  *sql.DB
 }
 
-// NewDBWrapper creates a new DBWrapper instance
-func NewDBWrapper(db *sql.DB) DatabaseInterface {
-	return &DBWrapper{db: db}
+// NewDBWrapper creates a new DBWrapper instance backed by separate write and
+// read connection pools. Both handles must point at the same database file.
+func NewDBWrapper(writeDB, readDB *sql.DB) DatabaseInterface {
+	return &DBWrapper{writeDB: writeDB, readDB: readDB}
 }

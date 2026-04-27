@@ -42,19 +42,22 @@ func SetupAndRun(staticFS embed.FS) {
 		}
 	}
 
-	sqlDB, err := database.InitDB(dbPath)
+	writeDB, readDB, err := database.InitDB(dbPath)
 	if err != nil {
 		logger.Logger.Error("Failed to initialize database", zap.Error(err))
 		os.Exit(1)
 	}
 
 	defer func() {
-		if err := sqlDB.Close(); err != nil {
-			logger.Logger.Error("Failed to close database connection", zap.Error(err))
+		if err := writeDB.Close(); err != nil {
+			logger.Logger.Error("Failed to close database write connection", zap.Error(err))
+		}
+		if err := readDB.Close(); err != nil {
+			logger.Logger.Error("Failed to close database read connection", zap.Error(err))
 		}
 	}()
 
-	db := database.NewDBWrapper(sqlDB)
+	db := database.NewDBWrapper(writeDB, readDB)
 
 	ctx := context.Background()
 

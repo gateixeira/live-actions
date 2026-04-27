@@ -41,7 +41,7 @@ func labelsFromJSON(s string) []string {
 // It prevents older events from overwriting newer terminal states.
 // Returns (updated, error) where updated indicates if the job was actually updated.
 func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.WorkflowJob, eventTimestamp time.Time) (bool, error) {
-	tx, err := db.db.BeginTx(ctx, nil)
+	tx, err := db.writeDB.BeginTx(ctx, nil)
 	if err != nil {
 		time.Sleep(time.Millisecond * 100)
 		return false, fmt.Errorf("failed to start transaction: %w", err)
@@ -94,7 +94,7 @@ func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.Work
 }
 
 func (db *DBWrapper) AddOrUpdateRun(ctx context.Context, workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error) {
-	tx, err := db.db.BeginTx(ctx, nil)
+	tx, err := db.writeDB.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to start transaction: %w", err)
 	}
@@ -174,7 +174,7 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, lim
 	}
 
 	var totalCount int
-	err := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs "+where, args...).Scan(&totalCount)
+	err := db.readDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs "+where, args...).Scan(&totalCount)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return []models.WorkflowRun{}, 0, nil
@@ -183,7 +183,7 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, lim
 	}
 
 	queryArgs := append(args, limit, offset)
-	rows, err := db.db.QueryContext(ctx,
+	rows, err := db.readDB.QueryContext(ctx,
 		"SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs "+where+" ORDER BY created_at DESC LIMIT ? OFFSET ?",
 		queryArgs...)
 	if err != nil {
@@ -213,7 +213,7 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, lim
 
 // GetRepositories returns the distinct list of repository names.
 func (db *DBWrapper) GetRepositories(ctx context.Context) ([]string, error) {
-	rows, err := db.db.QueryContext(ctx,
+	rows, err := db.readDB.QueryContext(ctx,
 		"SELECT DISTINCT repository FROM workflow_runs WHERE repository != '' ORDER BY repository ASC")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repositories: %w", err)
@@ -238,7 +238,7 @@ func (db *DBWrapper) GetRepositories(ctx context.Context) ([]string, error) {
 }
 
 func (db *DBWrapper) GetWorkflowJobsByRunID(ctx context.Context, runID int64) ([]models.WorkflowJob, error) {
-	rows, err := db.db.QueryContext(ctx, "SELECT id, name, run_id, status, labels, html_url, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
+	rows, err := db.readDB.QueryContext(ctx, "SELECT id, name, run_id, status, labels, html_url, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +277,7 @@ func (db *DBWrapper) GetWorkflowJobByID(ctx context.Context, jobID int64) (model
 	var htmlUrl sql.NullString
 	var startedAt, completedAt sql.NullString
 
-	err := db.db.QueryRowContext(ctx, `
+	err := db.readDB.QueryRowContext(ctx, `
 		SELECT id, name, run_id, status, labels, html_url, conclusion, 
 			   created_at, started_at, completed_at 
 		FROM workflow_jobs 
@@ -306,7 +306,7 @@ func (db *DBWrapper) GetWorkflowJobByID(ctx context.Context, jobID int64) (model
 func (db *DBWrapper) CleanupOldData(ctx context.Context, retentionPeriod time.Duration) (int64, int64, int64, error) {
 	cutoffTime := time.Now().Add(-retentionPeriod).Format(time.RFC3339)
 
-	tx, err := db.db.BeginTx(ctx, nil)
+	tx, err := db.writeDB.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to start transaction: %w", err)
 	}
@@ -366,7 +366,7 @@ func (db *DBWrapper) CleanupOldData(ctx context.Context, retentionPeriod time.Du
 func (db *DBWrapper) CleanupStaleJobs(ctx context.Context, threshold time.Duration) (int64, error) {
 	cutoffTime := time.Now().Add(-threshold).Format(time.RFC3339)
 
-	result, err := db.db.ExecContext(ctx, `
+	result, err := db.writeDB.ExecContext(ctx, `
 		UPDATE workflow_jobs
 		SET status = 'stale', completed_at = CURRENT_TIMESTAMP
 		WHERE status IN ('queued', 'in_progress')
@@ -385,7 +385,7 @@ func (db *DBWrapper) CleanupStaleJobs(ctx context.Context, threshold time.Durati
 
 func (db *DBWrapper) GetCurrentJobCounts(ctx context.Context) (int, int, error) {
 	var running, queued int
-	err := db.db.QueryRowContext(ctx, `
+	err := db.readDB.QueryRowContext(ctx, `
 		SELECT 
 			COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0)

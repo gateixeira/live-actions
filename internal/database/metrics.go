@@ -10,7 +10,7 @@ import (
 
 // InsertMetricsSnapshot records current running/queued job counts.
 func (d *DBWrapper) InsertMetricsSnapshot(ctx context.Context, running, queued int) error {
-	_, err := d.db.ExecContext(ctx,
+	_, err := d.writeDB.ExecContext(ctx,
 		"INSERT INTO metrics_snapshots (running_jobs, queued_jobs) VALUES (?, ?)",
 		running, queued,
 	)
@@ -20,7 +20,7 @@ func (d *DBWrapper) InsertMetricsSnapshot(ctx context.Context, running, queued i
 // GetMetricsHistory returns time-series snapshots within the given duration.
 func (d *DBWrapper) GetMetricsHistory(ctx context.Context, since time.Duration) ([]models.MetricsSnapshot, error) {
 	cutoff := time.Now().UTC().Add(-since).Format("2006-01-02 15:04:05")
-	rows, err := d.db.QueryContext(ctx,
+	rows, err := d.readDB.QueryContext(ctx,
 		`SELECT timestamp, running_jobs, queued_jobs
 		 FROM metrics_snapshots
 		 WHERE timestamp >= ?
@@ -60,7 +60,7 @@ func (d *DBWrapper) GetMetricsSummary(ctx context.Context, since time.Duration) 
 	}
 
 	// Current running and queued counts (live from workflow_jobs)
-	row := d.db.QueryRowContext(ctx, `SELECT
+	row := d.readDB.QueryRowContext(ctx, `SELECT
 		COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0)
 		FROM workflow_jobs`)
@@ -77,7 +77,7 @@ func (d *DBWrapper) GetMetricsSummary(ctx context.Context, since time.Duration) 
 	// Average queue time: average seconds between created_at and started_at for
 	// jobs that started within the period.
 	var avgQueue float64
-	err := d.db.QueryRowContext(ctx, `SELECT COALESCE(AVG(
+	err := d.readDB.QueryRowContext(ctx, `SELECT COALESCE(AVG(
 		(julianday(started_at) - julianday(created_at)) * 86400
 	), 0) FROM workflow_jobs
 	WHERE started_at IS NOT NULL AND started_at >= ?`, jobsCutoff).Scan(&avgQueue)
@@ -88,7 +88,7 @@ func (d *DBWrapper) GetMetricsSummary(ctx context.Context, since time.Duration) 
 	// Average run time: average seconds between started_at and completed_at for
 	// jobs that completed within the period.
 	var avgRun float64
-	err = d.db.QueryRowContext(ctx, `SELECT COALESCE(AVG(
+	err = d.readDB.QueryRowContext(ctx, `SELECT COALESCE(AVG(
 		(julianday(completed_at) - julianday(started_at)) * 86400
 	), 0) FROM workflow_jobs
 	WHERE completed_at IS NOT NULL AND started_at IS NOT NULL AND completed_at >= ?`, jobsCutoff).Scan(&avgRun)
@@ -101,7 +101,7 @@ func (d *DBWrapper) GetMetricsSummary(ctx context.Context, since time.Duration) 
 
 	// Peak demand from snapshots (max of running + queued in the period)
 	var peak float64
-	err = d.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(running_jobs + queued_jobs), 0)
+	err = d.readDB.QueryRowContext(ctx, `SELECT COALESCE(MAX(running_jobs + queued_jobs), 0)
 		FROM metrics_snapshots WHERE timestamp >= ?`, snapshotsCutoff).Scan(&peak)
 	if err == nil {
 		result["peak_demand"] = peak
@@ -119,7 +119,7 @@ type LabelJobCount struct {
 
 // GetCurrentJobCountsByLabel returns current running and queued counts grouped by the first label.
 func (d *DBWrapper) GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJobCount, error) {
-	rows, err := d.db.QueryContext(ctx, `
+	rows, err := d.readDB.QueryContext(ctx, `
 		SELECT
 			json_extract(labels, '$[0]') AS label,
 			SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS running,

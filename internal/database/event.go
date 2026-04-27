@@ -30,7 +30,7 @@ func (db *DBWrapper) StoreWebhookEvent(ctx context.Context, event *models.Ordere
 	}
 
 	for range maxRetries {
-		_, err = db.db.ExecContext(ctx,
+		_, err = db.writeDB.ExecContext(ctx,
 			`INSERT INTO webhook_events (delivery_id, event_type, sequence_id, 
             github_timestamp, received_at, processed_at, raw_payload, status, ordering_key, status_priority) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -73,7 +73,7 @@ func (db *DBWrapper) GetPendingEventsGrouped(ctx context.Context, limit int) ([]
         ORDER BY github_timestamp ASC, ordering_key ASC, status_priority ASC
         LIMIT ?`
 
-	rows, err := db.db.QueryContext(ctx, query, limit)
+	rows, err := db.readDB.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pending events: %w", err)
 	}
@@ -131,7 +131,7 @@ func (db *DBWrapper) GetPendingEventsByAge(ctx context.Context, maxAge time.Dura
         ORDER BY github_timestamp ASC, ordering_key ASC, status_priority ASC
         LIMIT ?`
 
-	rows, err := db.db.QueryContext(ctx, query, cutoff, limit)
+	rows, err := db.readDB.QueryContext(ctx, query, cutoff, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pending events by age: %w", err)
 	}
@@ -180,7 +180,7 @@ func (db *DBWrapper) GetPendingEventsByAge(ctx context.Context, maxAge time.Dura
 
 func (db *DBWrapper) MarkEventProcessed(ctx context.Context, deliveryID string) error {
 	now := time.Now().Format(time.RFC3339)
-	_, err := db.db.ExecContext(ctx,
+	_, err := db.writeDB.ExecContext(ctx,
 		"UPDATE webhook_events SET status = 'processed', processed_at = ?, raw_payload = NULL WHERE delivery_id = ?",
 		now, deliveryID)
 	if err != nil {
@@ -190,7 +190,7 @@ func (db *DBWrapper) MarkEventProcessed(ctx context.Context, deliveryID string) 
 }
 
 func (db *DBWrapper) MarkEventFailed(ctx context.Context, deliveryID string) error {
-	_, err := db.db.ExecContext(ctx,
+	_, err := db.writeDB.ExecContext(ctx,
 		"UPDATE webhook_events SET status = 'failed' WHERE delivery_id = ?",
 		deliveryID)
 	if err != nil {
