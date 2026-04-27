@@ -22,11 +22,26 @@ var migrationsFS embed.FS
 // pools via the DSN. Pragmas in SQLite are connection-scoped (except
 // journal_mode, which is persistent), so encoding them in the DSN guarantees
 // they are set on every pooled connection rather than only the first one.
+//
+// Performance-tuning pragmas:
+//   - cache_size=-65536 reserves up to 64 MiB of page cache per connection
+//     (negative values are interpreted as KiB by SQLite). With ~8 read
+//     connections plus the writer this caps cache memory at ~576 MiB and
+//     keeps hot indexes/pages resident, removing per-query disk hits.
+//   - temp_store=MEMORY keeps temporary tables, indexes and sort scratch in
+//     RAM instead of spilling to disk, which speeds up GROUP BY / ORDER BY
+//     queries used by the dashboard.
+//   - mmap_size=268435456 (256 MiB) lets SQLite memory-map the main database
+//     file for reads, bypassing the page cache for cold reads and reducing
+//     syscall overhead on pooled SELECTs.
 var connPragmas = []string{
 	"journal_mode(WAL)",
 	"busy_timeout(5000)",
 	"synchronous(NORMAL)",
 	"foreign_keys(ON)",
+	"cache_size(-65536)",
+	"temp_store(MEMORY)",
+	"mmap_size(268435456)",
 }
 
 // InitDB opens two *sql.DB handles against the same SQLite file:

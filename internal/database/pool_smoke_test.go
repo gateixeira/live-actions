@@ -17,12 +17,15 @@ t.Fatalf("InitDB: %v", err)
 defer w.Close()
 defer r.Close()
 
-cases := map[string]string{
-"journal_mode": "wal",
-"busy_timeout": "5000",
-"synchronous":  "1", // NORMAL
-"foreign_keys": "1",
-}
+	cases := map[string]string{
+		"journal_mode": "wal",
+		"busy_timeout": "5000",
+		"synchronous":  "1", // NORMAL
+		"foreign_keys": "1",
+		"cache_size":   "-65536",
+		"temp_store":   "2", // MEMORY
+		"mmap_size":    "268435456",
+	}
 for p, want := range cases {
 var wv, rv string
 if err := w.QueryRow("PRAGMA " + p).Scan(&wv); err != nil {
