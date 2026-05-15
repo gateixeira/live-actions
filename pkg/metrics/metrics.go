@@ -1,7 +1,10 @@
 package metrics
 
 import (
+	"database/sql"
+
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
 // Registry holds all Prometheus metrics
@@ -17,6 +20,22 @@ type Registry struct {
 
 	// Job completion counters
 	JobConclusionsTotal *prometheus.CounterVec
+
+	// Webhook ingest counters: outcome ∈ {accepted, rejected_queue_full,
+	// rejected_invalid, ignored}.
+	WebhookEventsTotal *prometheus.CounterVec
+
+	// Ingest queue capacity is set once at startup; depth is supplied by the
+	// service via RegisterIngestQueueDepth.
+	IngestQueueCapacity prometheus.Gauge
+
+	// Flush worker observability.
+	FlushBatchDurationSeconds prometheus.Histogram
+	FlushBatchEvents          prometheus.Histogram
+
+	// SSE fanout observability.
+	SSEEventsBroadcastTotal *prometheus.CounterVec
+	SSEEventsDroppedTotal   *prometheus.CounterVec
 }
 
 // NewRegistry creates and registers all Prometheus metrics
@@ -45,6 +64,38 @@ func NewRegistry() *Registry {
 			Name: "github_runners_job_conclusions_total",
 			Help: "Total number of completed jobs by conclusion",
 		}, []string{"conclusion"}),
+
+		WebhookEventsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "live_actions_webhook_events_total",
+			Help: "Total number of webhook deliveries received, partitioned by event type and outcome",
+		}, []string{"event_type", "outcome"}),
+
+		IngestQueueCapacity: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "live_actions_ingest_queue_capacity",
+			Help: "Maximum number of events the in-memory ingest queue can buffer",
+		}),
+
+		FlushBatchDurationSeconds: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "live_actions_flush_batch_duration_seconds",
+			Help:    "Wall time spent draining a single flushReadyEvents tick (one or more batches)",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms .. ~4s
+		}),
+
+		FlushBatchEvents: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "live_actions_flush_batch_events",
+			Help:    "Number of events processed in a single flushReadyEvents tick",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 14), // 1 .. ~8k
+		}),
+
+		SSEEventsBroadcastTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "live_actions_sse_events_broadcast_total",
+			Help: "Total number of SSE events fanned out to subscribers (counts the broadcast, not per-subscriber sends)",
+		}, []string{"type"}),
+
+		SSEEventsDroppedTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "live_actions_sse_events_dropped_total",
+			Help: "Total number of SSE events dropped because a subscriber's per-connection buffer was full",
+		}, []string{"type"}),
 	}
 
 	prometheus.MustRegister(
@@ -52,6 +103,12 @@ func NewRegistry() *Registry {
 		r.JobsByLabel,
 		r.QueueDurationSeconds,
 		r.JobConclusionsTotal,
+		r.WebhookEventsTotal,
+		r.IngestQueueCapacity,
+		r.FlushBatchDurationSeconds,
+		r.FlushBatchEvents,
+		r.SSEEventsBroadcastTotal,
+		r.SSEEventsDroppedTotal,
 	)
 
 	return r
@@ -78,4 +135,32 @@ func (r *Registry) RecordJobConclusion(conclusion string) {
 // ResetJobsByLabel clears all label gauge values before re-setting them.
 func (r *Registry) ResetJobsByLabel() {
 	r.JobsByLabel.Reset()
+}
+
+// RegisterIngestQueueDepth registers a GaugeFunc that reports the live ingest
+// queue depth by calling the supplied closure on every scrape. Safe to call
+// once at startup. Errors from duplicate registration are ignored so tests
+// that re-init the global registry do not panic.
+func (r *Registry) RegisterIngestQueueDepth(depth func() float64) {
+g := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+Name: "live_actions_ingest_queue_depth",
+Help: "Current number of events buffered in the in-memory ingest queue",
+}, depth)
+_ = prometheus.Register(g)
+}
+
+// RegisterSSESubscribers registers a GaugeFunc that reports the number of
+// connected SSE clients by calling the supplied closure on every scrape.
+func (r *Registry) RegisterSSESubscribers(count func() float64) {
+g := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+Name: "live_actions_sse_subscribers",
+Help: "Current number of connected SSE clients",
+}, count)
+_ = prometheus.Register(g)
+}
+
+// RegisterDBStats wires the standard database/sql DBStats collector for the
+// supplied pool, namespaced by the given pool name (e.g. "write", "read").
+func (r *Registry) RegisterDBStats(name string, db *sql.DB) {
+_ = prometheus.Register(collectors.NewDBStatsCollector(db, name))
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/gateixeira/live-actions/internal/database"
 	"github.com/gateixeira/live-actions/models"
 	"github.com/gateixeira/live-actions/pkg/logger"
+	"github.com/gateixeira/live-actions/pkg/metrics"
 	"go.uber.org/zap"
 )
 
@@ -76,6 +77,18 @@ func (s *EventOrderingService) Start() {
 	s.wg.Add(2)
 	go s.ingestWorker()
 	go s.flushWorker()
+}
+
+// IngestQueueLen returns the current number of events buffered in the
+// in-memory ingest channel. Intended for observability/health endpoints.
+func (s *EventOrderingService) IngestQueueLen() int {
+	return len(s.ingestCh)
+}
+
+// IngestQueueCap returns the configured capacity of the in-memory ingest
+// channel. Intended for observability/health endpoints.
+func (s *EventOrderingService) IngestQueueCap() int {
+	return cap(s.ingestCh)
 }
 
 // Stop signals both workers to drain and exit, then blocks until they do.
@@ -219,6 +232,16 @@ func (s *EventOrderingService) flushReadyEvents() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	start := time.Now()
+	processed := 0
+	defer func() {
+		reg := metrics.GetRegistry()
+		reg.FlushBatchDurationSeconds.Observe(time.Since(start).Seconds())
+		if processed > 0 {
+			reg.FlushBatchEvents.Observe(float64(processed))
+		}
+	}()
+
 	deadline := time.Now().Add(drainBudget)
 	for i := 0; i < maxDrainIterations; i++ {
 		if s.ctx.Err() != nil {
@@ -236,6 +259,7 @@ func (s *EventOrderingService) flushReadyEvents() {
 			zap.Int("count", len(events)),
 			zap.Int("iteration", i))
 		s.processEvents(events)
+		processed += len(events)
 
 		// Stop early when the backlog is drained or our time slice is up.
 		if len(events) < s.batchSize || time.Now().After(deadline) {

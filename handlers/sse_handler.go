@@ -7,6 +7,7 @@ import (
 
 	"github.com/gateixeira/live-actions/models"
 	"github.com/gateixeira/live-actions/pkg/logger"
+	"github.com/gateixeira/live-actions/pkg/metrics"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -168,12 +169,16 @@ func (h *SSEHandler) sendEventNow(event SSEEvent) {
 	}
 	h.mu.Unlock()
 
+	reg := metrics.GetRegistry()
+	reg.SSEEventsBroadcastTotal.WithLabelValues(event.Type).Inc()
+
 	for _, s := range subs {
 		select {
 		case s.ch <- event:
 		default:
 			// Per-client buffer full: drop this event for that client.
 			// They will catch up on the next REST poll.
+			reg.SSEEventsDroppedTotal.WithLabelValues(event.Type).Inc()
 			logger.Logger.Debug("SSE subscriber buffer full, dropping event",
 				zap.String("type", event.Type))
 		}
@@ -205,13 +210,16 @@ func (h *SSEHandler) unsubscribe(s *sseSubscriber) {
 	// released.
 }
 
-// subscriberCount reports how many clients are currently connected. Intended
-// for tests and observability.
-func (h *SSEHandler) subscriberCount() int {
+// SubscriberCount reports how many clients are currently connected. Intended
+// for tests and observability (exposed as a Prometheus GaugeFunc at startup).
+func (h *SSEHandler) SubscriberCount() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return len(h.subs)
 }
+
+// subscriberCount is retained as a lower-case alias for older test call sites.
+func (h *SSEHandler) subscriberCount() int { return h.SubscriberCount() }
 
 func (h *SSEHandler) HandleSSE() gin.HandlerFunc {
 	return func(c *gin.Context) {
