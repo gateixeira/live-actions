@@ -40,6 +40,16 @@ func (h *WorkflowRunHandler) HandleEvent(eventData []byte, sequence *models.Even
 	event.WorkflowRun.Status = models.JobStatus(event.Action)
 	event.WorkflowRun.RepositoryName = event.Repository.Name
 
+	// Reject unknown statuses up-front (see WorkflowJobHandler.HandleEvent for
+	// the rationale). Permanent error — do not spill / retry.
+	if _, ok := models.RunStatusPriority(event.WorkflowRun.Status); !ok {
+		logger.Logger.Warn("Unknown workflow_run action; refusing to upsert",
+			zap.String("action", event.Action),
+			zap.Int64("run_id", event.WorkflowRun.ID),
+			zap.String("delivery_id", sequence.DeliveryID))
+		return nil
+	}
+
 	logger.Logger.Info("Processing workflow run event",
 		zap.String("action", event.Action),
 		zap.Int64("run_id", event.WorkflowRun.ID),
@@ -106,15 +116,10 @@ func (h *WorkflowRunHandler) GetStatusPriority(eventData []byte) (int, error) {
 		return 0, fmt.Errorf("failed to parse workflow_run JSON payload: %w", err)
 	}
 
-	switch models.JobStatus(event.Action) {
-	case models.JobStatusRequested:
-		return 1, nil
-	case models.JobStatusInProgress:
-		return 2, nil
-	case models.JobStatusCompleted, models.JobStatusCancelled:
-		return 3, nil
-	default:
+	prio, ok := models.RunStatusPriority(models.JobStatus(event.Action))
+	if !ok {
 		logger.Logger.Warn("Unknown run status", zap.String("status", event.Action))
-		return 999, nil
+		return 0, nil
 	}
+	return prio, nil
 }

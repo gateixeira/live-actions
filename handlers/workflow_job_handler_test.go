@@ -204,8 +204,9 @@ func TestWorkflowJobHandler_HandleEvent_DatabaseAddJobError(t *testing.T) {
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
 
-	// Should not fail even if AddOrUpdateJob fails
-	assert.NoError(t, err, "HandleEvent should continue processing even if AddOrUpdateJob fails")
+	// AddOrUpdateJob failures are now propagated so the ordering layer can
+	// retry the event instead of silently dropping it.
+	assert.Error(t, err, "HandleEvent should surface AddOrUpdateJob errors")
 	mockDB.AssertExpectations(t)
 }
 
@@ -750,7 +751,7 @@ func TestWorkflowJobHandler_GetStatusPriority(t *testing.T) {
 				data, _ := json.Marshal(event)
 				return data
 			}(),
-			expectedPriority: 999, // Default for unknown status
+			expectedPriority: 0, // Unknown status is rejected with priority 0
 			expectError:      false,
 		},
 	}

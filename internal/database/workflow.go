@@ -37,30 +37,66 @@ func labelsFromJSON(s string) []string {
 	return labels
 }
 
-// AddOrUpdateJob adds or updates a workflow job with atomicity checks.
-// It prevents older events from overwriting newer terminal states.
-// Returns (updated, error) where updated indicates if the job was actually updated.
+// AddOrUpdateJob adds or updates a workflow job, enforcing the lifecycle
+// transition rules so the typed-table write is order-independent. Returns
+// (updated, error) where updated indicates whether the row was actually
+// changed; a rejected transition (e.g. a late lower-priority event) returns
+// (false, nil), not an error.
+//
+// Transition rules:
+//   - existing absent: insert
+//   - incoming status unknown: reject (false, nil)
+//   - existing terminal AND incoming status equals existing: idempotent no-op
+//     (false, nil); the row is already at the right final state
+//   - existing terminal AND incoming status differs: reject (false, nil) so a
+//     late `cancelled` cannot overwrite a recorded `completed` and vice versa
+//   - existing non-terminal AND incoming priority < existing priority:
+//     reject (false, nil), preserving lifecycle monotonicity
+//   - otherwise: apply the upsert
+//
+// `eventTimestamp` is currently informational; ordering is decided by
+// status priority, not wall-clock timestamps.
 func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.WorkflowJob, eventTimestamp time.Time) (bool, error) {
+	incomingPrio, ok := models.JobStatusPriority(workflowJob.Status)
+	if !ok {
+		// Defence in depth: handlers reject unknown statuses up-front, but
+		// callers (tests, future code paths) might not.
+		return false, nil
+	}
+
 	tx, err := db.writeDB.BeginTx(ctx, nil)
 	if err != nil {
 		time.Sleep(time.Millisecond * 100)
 		return false, fmt.Errorf("failed to start transaction: %w", err)
 	}
 
-	var isTerminal bool
-	err = tx.QueryRow(`
-		SELECT CASE WHEN status IN ('completed', 'cancelled', 'stale') THEN 1 ELSE 0 END
-		FROM workflow_jobs 
-		WHERE id = ?`, workflowJob.ID).Scan(&isTerminal)
-
+	var existingStatus string
+	err = tx.QueryRow(`SELECT status FROM workflow_jobs WHERE id = ?`, workflowJob.ID).
+		Scan(&existingStatus)
 	if err != nil && err != sql.ErrNoRows {
 		_ = tx.Rollback()
-		return false, fmt.Errorf("failed to check terminal state: %w", err)
+		return false, fmt.Errorf("failed to load existing job status: %w", err)
 	}
 
-	if err == nil && isTerminal {
-		_ = tx.Rollback()
-		return false, nil
+	if err == nil {
+		// Row exists: enforce transition rules.
+		existing := models.JobStatus(existingStatus)
+		existingPrio, existingKnown := models.JobStatusPriority(existing)
+		switch {
+		case models.IsTerminalJobStatus(existing) && existing == workflowJob.Status:
+			// Idempotent replay of the final state — nothing to do.
+			_ = tx.Rollback()
+			return false, nil
+		case models.IsTerminalJobStatus(existing):
+			// Different terminal or any progression away from terminal:
+			// reject so the historical record is preserved.
+			_ = tx.Rollback()
+			return false, nil
+		case existingKnown && incomingPrio < existingPrio:
+			// Older lifecycle event arriving late — drop it.
+			_ = tx.Rollback()
+			return false, nil
+		}
 	}
 
 	_, err = tx.Exec(
@@ -93,26 +129,42 @@ func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.Work
 	return true, nil
 }
 
+// AddOrUpdateRun adds or updates a workflow run, enforcing the same
+// lifecycle/terminal transition rules as AddOrUpdateJob (see that function's
+// doc comment). The run priority map is shorter (no waiting/queued).
 func (db *DBWrapper) AddOrUpdateRun(ctx context.Context, workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error) {
+	incomingPrio, ok := models.RunStatusPriority(workflowRun.Status)
+	if !ok {
+		return false, nil
+	}
+
 	tx, err := db.writeDB.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to start transaction: %w", err)
 	}
 
-	var isTerminal bool
-	err = tx.QueryRow(`
-		SELECT CASE WHEN status IN ('completed', 'cancelled') THEN 1 ELSE 0 END
-		FROM workflow_runs 
-		WHERE id = ?`, workflowRun.ID).Scan(&isTerminal)
-
+	var existingStatus string
+	err = tx.QueryRow(`SELECT status FROM workflow_runs WHERE id = ?`, workflowRun.ID).
+		Scan(&existingStatus)
 	if err != nil && err != sql.ErrNoRows {
 		_ = tx.Rollback()
-		return false, fmt.Errorf("failed to check terminal state: %w", err)
+		return false, fmt.Errorf("failed to load existing run status: %w", err)
 	}
 
-	if err == nil && isTerminal {
-		_ = tx.Rollback()
-		return false, nil
+	if err == nil {
+		existing := models.JobStatus(existingStatus)
+		existingPrio, existingKnown := models.RunStatusPriority(existing)
+		switch {
+		case models.IsTerminalRunStatus(existing) && existing == workflowRun.Status:
+			_ = tx.Rollback()
+			return false, nil
+		case models.IsTerminalRunStatus(existing):
+			_ = tx.Rollback()
+			return false, nil
+		case existingKnown && incomingPrio < existingPrio:
+			_ = tx.Rollback()
+			return false, nil
+		}
 	}
 
 	_, err = tx.Exec(
