@@ -50,7 +50,7 @@ func TestNewEventOrderingService(t *testing.T) {
 	assert.NotNil(t, service)
 	assert.Equal(t, mockDB, service.db)
 	assert.NotNil(t, service.processFunc)
-	assert.Equal(t, 1*time.Second, service.flushInterval)
+	assert.Equal(t, 5*time.Second, service.flushInterval)
 	assert.Equal(t, 10*time.Second, service.maxAge)
 	assert.Equal(t, 500, service.batchSize)
 	assert.NotNil(t, service.ctx)
@@ -114,10 +114,49 @@ func TestEventOrderingService_AddEvent(t *testing.T) {
 	})
 }
 
-// TestEventOrderingService_IngestWorker_BatchesInserts asserts that events
-// pushed via AddEvent are persisted via StoreWebhookEvents (the batched call)
-// rather than per-event StoreWebhookEvent.
-func TestEventOrderingService_IngestWorker_BatchesInserts(t *testing.T) {
+// TestEventOrderingService_IngestWorker_HappyPathSkipsSpill asserts that on
+// the happy path (processFunc returns nil) the ingest worker does NOT write
+// to webhook_events at all — events are processed directly off the
+// in-memory channel.
+func TestEventOrderingService_IngestWorker_HappyPathSkipsSpill(t *testing.T) {
+	setupTestLoggerForEventOrdering()
+	defer logger.SyncLogger()
+
+	mockDB := new(database.MockDatabase)
+	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.Anything, mock.Anything).Return([]*models.OrderedEvent{}, nil).Maybe()
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
+
+	var processed int32
+	var processedMu sync.Mutex
+	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error {
+		processedMu.Lock()
+		processed++
+		processedMu.Unlock()
+		return nil
+	})
+	service.ingestBatchWait = 10 * time.Millisecond
+	service.flushInterval = time.Hour
+	service.Start()
+
+	for i := 0; i < 5; i++ {
+		assert.NoError(t, service.AddEvent(createTestEvent(
+			"d-"+string(rune('0'+i)), "workflow_job", "k", 1)))
+	}
+
+	time.Sleep(80 * time.Millisecond)
+	service.Stop()
+
+	processedMu.Lock()
+	assert.Equal(t, int32(5), processed, "all events should reach processFunc")
+	processedMu.Unlock()
+	mockDB.AssertNotCalled(t, "StoreWebhookEvents", mock.Anything, mock.Anything)
+	mockDB.AssertNotCalled(t, "StoreWebhookEvent", mock.Anything, mock.Anything)
+}
+
+// TestEventOrderingService_IngestWorker_TransientFailureSpills asserts that
+// when processFunc returns a non-permanent error the event is spilled to
+// webhook_events so the cold-path flush worker can retry it.
+func TestEventOrderingService_IngestWorker_TransientFailureSpills(t *testing.T) {
 	setupTestLoggerForEventOrdering()
 	defer logger.SyncLogger()
 
@@ -128,23 +167,47 @@ func TestEventOrderingService_IngestWorker_BatchesInserts(t *testing.T) {
 	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.Anything, mock.Anything).Return([]*models.OrderedEvent{}, nil).Maybe()
 	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
 
-	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error { return nil })
+	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error {
+		return errors.New("simulated transient db failure")
+	})
 	service.ingestBatchWait = 10 * time.Millisecond
-	service.flushInterval = time.Hour // keep the flush worker out of the way
+	service.flushInterval = time.Hour
 	service.Start()
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 3; i++ {
 		assert.NoError(t, service.AddEvent(createTestEvent(
 			"d-"+string(rune('0'+i)), "workflow_job", "k", 1)))
 	}
 
-	// Wait for the batch ticker to fire at least once.
-	time.Sleep(60 * time.Millisecond)
+	time.Sleep(80 * time.Millisecond)
 	service.Stop()
 
-	// Verify StoreWebhookEvents was called and the legacy per-event method was not.
 	mockDB.AssertCalled(t, "StoreWebhookEvents", mock.Anything, mock.Anything)
-	mockDB.AssertNotCalled(t, "StoreWebhookEvent", mock.Anything, mock.Anything)
+}
+
+// TestEventOrderingService_IngestWorker_PermanentFailureDropped asserts that
+// permanent failures are NOT spilled (retrying them would just fail again).
+func TestEventOrderingService_IngestWorker_PermanentFailureDropped(t *testing.T) {
+	setupTestLoggerForEventOrdering()
+	defer logger.SyncLogger()
+
+	mockDB := new(database.MockDatabase)
+	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.Anything, mock.Anything).Return([]*models.OrderedEvent{}, nil).Maybe()
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
+
+	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error {
+		return ErrPermanent
+	})
+	service.ingestBatchWait = 10 * time.Millisecond
+	service.flushInterval = time.Hour
+	service.Start()
+
+	assert.NoError(t, service.AddEvent(createTestEvent("d-1", "workflow_job", "k", 1)))
+
+	time.Sleep(80 * time.Millisecond)
+	service.Stop()
+
+	mockDB.AssertNotCalled(t, "StoreWebhookEvents", mock.Anything, mock.Anything)
 }
 
 func TestEventOrderingService_StartStop(t *testing.T) {
@@ -609,7 +672,7 @@ func TestEventOrderingService_CustomConfiguration(t *testing.T) {
 	originalBatchSize := service.batchSize
 
 	// Verify default values
-	assert.Equal(t, 1*time.Second, originalFlushInterval)
+	assert.Equal(t, 5*time.Second, originalFlushInterval)
 	assert.Equal(t, 10*time.Second, originalMaxAge)
 	assert.Equal(t, 500, originalBatchSize)
 

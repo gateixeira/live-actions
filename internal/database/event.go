@@ -187,6 +187,7 @@ func (db *DBWrapper) GetPendingEventsGrouped(ctx context.Context, limit int) ([]
 			event.ProcessedAt = &t
 		}
 		event.RawPayload = []byte(rawPayload)
+		event.Persisted = true
 
 		events = append(events, &event)
 	}
@@ -245,6 +246,7 @@ func (db *DBWrapper) GetPendingEventsByAge(ctx context.Context, maxAge time.Dura
 			event.ProcessedAt = &t
 		}
 		event.RawPayload = []byte(rawPayload)
+		event.Persisted = true
 
 		events = append(events, &event)
 	}

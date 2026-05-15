@@ -267,15 +267,15 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 }
 
 func (h *WebhookHandler) processOrderedEvent(event *models.OrderedEvent) error {
-	// The row already exists in webhook_events: it was inserted by the
-	// ingest worker before this event reached processFunc. Re-upserting
-	// here was an unnecessary write per event under load.
+	// On the happy path the event arrives straight from the in-memory ingest
+	// channel and was never written to webhook_events; only spilled events
+	// (event.Persisted == true) need MarkEventProcessed/MarkEventFailed.
 
 	handler, exists := h.handlers[event.EventType]
 
 	if !exists {
 		logger.Logger.Warn("No handler registered for event type", zap.String("event_type", event.EventType))
-		return fmt.Errorf("event type not supported: %s", event.EventType)
+		return fmt.Errorf("event type %s: %w", event.EventType, services.ErrPermanent)
 	}
 
 	jsonData := event.RawPayload
@@ -285,11 +285,16 @@ func (h *WebhookHandler) processOrderedEvent(event *models.OrderedEvent) error {
 		logger.Logger.Error("Failed to handle event", zap.Error(err),
 			zap.String("event_type", event.EventType),
 			zap.String("delivery_id", event.Sequence.DeliveryID))
-		_ = h.db.MarkEventFailed(context.TODO(), event.Sequence.DeliveryID)
+		if event.Persisted {
+			_ = h.db.MarkEventFailed(context.TODO(), event.Sequence.DeliveryID)
+		}
 		return fmt.Errorf("failed to handle event: %w", err)
 	}
 
-	return h.db.MarkEventProcessed(context.TODO(), event.Sequence.DeliveryID)
+	if event.Persisted {
+		return h.db.MarkEventProcessed(context.TODO(), event.Sequence.DeliveryID)
+	}
+	return nil
 }
 
 func (h *WebhookHandler) Shutdown() {

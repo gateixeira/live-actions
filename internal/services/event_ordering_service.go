@@ -19,6 +19,27 @@ import (
 // webhook deliveries, so the affected event will need manual redelivery.
 var ErrIngestQueueFull = errors.New("event ingest queue full")
 
+// ErrPermanent wraps errors that are known to be unrecoverable: bad payload,
+// schema mismatch, unknown event type. Events that fail with this sentinel
+// MUST NOT be retried — the failure would just repeat on every replay.
+//
+// ErrTransient wraps errors that are expected to succeed on retry: SQLite
+// busy/locked, transient I/O. Events that fail with this sentinel are
+// spilled to webhook_events so the cold-path flush worker retries them.
+//
+// Any error that is neither classified is treated as transient (spill +
+// retry) — that's the safe default; an event silently dropped is much worse
+// than one extra cold-path retry.
+var (
+	ErrPermanent = errors.New("permanent processing error")
+	ErrTransient = errors.New("transient processing error")
+)
+
+// IsPermanent reports whether err should NOT be retried.
+func IsPermanent(err error) bool {
+	return errors.Is(err, ErrPermanent)
+}
+
 // Default sizing for the async ingest pipeline. These values trade a small
 // shutdown-loss window for a large throughput improvement: events accepted
 // from GitHub live in memory until the next batch flush.
@@ -59,7 +80,7 @@ func NewEventOrderingService(db database.DatabaseInterface, processFunc func(*mo
 	return &EventOrderingService{
 		db:               db,
 		processFunc:      processFunc,
-		flushInterval:    1 * time.Second,
+		flushInterval:    5 * time.Second,
 		maxAge:           10 * time.Second,
 		batchSize:        500,
 		ingestCh:         make(chan *models.OrderedEvent, defaultIngestChannelSize),
@@ -141,31 +162,70 @@ func (s *EventOrderingService) AddEvent(event *models.OrderedEvent) error {
 	}
 }
 
-// ingestWorker drains ingestCh and persists events in batched transactions.
-// On context cancellation it drains any remaining buffered events before
-// signalling ingestDoneCh so the flush worker can run its final flushAll
-// against an up-to-date webhook_events table.
+// ingestWorker drains ingestCh and processes each event in arrival order on
+// the happy path: processFunc is called directly and the event never touches
+// webhook_events. Only events whose processing fails with a non-permanent
+// error are spilled to webhook_events for the cold-path flush worker to
+// retry — and those spills are batched.
+//
+// On context cancellation the worker drains any remaining buffered events
+// before signalling ingestDoneCh so the flush worker can run its final
+// flushAll against an up-to-date webhook_events table.
 func (s *EventOrderingService) ingestWorker() {
 	defer s.wg.Done()
 	defer close(s.ingestDoneCh)
 
-	batch := make([]*models.OrderedEvent, 0, s.ingestBatchSize)
+	spill := make([]*models.OrderedEvent, 0, s.ingestBatchSize)
 	ticker := time.NewTicker(s.ingestBatchWait)
 	defer ticker.Stop()
 
-	flush := func(ctx context.Context) {
-		if len(batch) == 0 {
+	flushSpill := func(ctx context.Context) {
+		if len(spill) == 0 {
 			return
 		}
-		if err := s.db.StoreWebhookEvents(ctx, batch); err != nil {
-			logger.Logger.Error("Batched webhook event insert failed",
-				zap.Int("batch_size", len(batch)),
+		if err := s.db.StoreWebhookEvents(ctx, spill); err != nil {
+			// We failed to spill — there is no further safety net, so log
+			// loudly. The events are lost (in-memory only) unless GitHub
+			// resends them via manual redelivery.
+			logger.Logger.Error("Failed to spill webhook events for retry; events dropped",
+				zap.Int("batch_size", len(spill)),
 				zap.Error(err),
 			)
+			for _, ev := range spill {
+				metrics.GetRegistry().WebhookEventsTotal.
+					WithLabelValues(ev.EventType, "spill_failed").Inc()
+			}
 		} else {
-			logger.Logger.Debug("Persisted webhook event batch", zap.Int("batch_size", len(batch)))
+			logger.Logger.Debug("Spilled events for cold-path retry", zap.Int("batch_size", len(spill)))
+			for _, ev := range spill {
+				metrics.GetRegistry().WebhookEventsTotal.
+					WithLabelValues(ev.EventType, "spilled").Inc()
+			}
 		}
-		batch = batch[:0]
+		spill = spill[:0]
+	}
+
+	process := func(ev *models.OrderedEvent) {
+		err := s.processFunc(ev)
+		if err == nil {
+			return
+		}
+		if IsPermanent(err) {
+			logger.Logger.Warn("Permanent processing failure; event dropped",
+				zap.String("event_type", ev.EventType),
+				zap.String("delivery_id", ev.Sequence.DeliveryID),
+				zap.String("ordering_key", ev.OrderingKey),
+				zap.Error(err))
+			metrics.GetRegistry().WebhookEventsTotal.
+				WithLabelValues(ev.EventType, "permanent_failure").Inc()
+			return
+		}
+		// Transient (or unclassified): spill so the flush worker retries.
+		logger.Logger.Warn("Transient processing failure; spilling to webhook_events",
+			zap.String("event_type", ev.EventType),
+			zap.String("delivery_id", ev.Sequence.DeliveryID),
+			zap.Error(err))
+		spill = append(spill, ev)
 	}
 
 	for {
@@ -178,22 +238,22 @@ func (s *EventOrderingService) ingestWorker() {
 			for {
 				select {
 				case ev := <-s.ingestCh:
-					batch = append(batch, ev)
-					if len(batch) >= s.ingestBatchSize {
-						flush(drainCtx)
+					process(ev)
+					if len(spill) >= s.ingestBatchSize {
+						flushSpill(drainCtx)
 					}
 				default:
-					flush(drainCtx)
+					flushSpill(drainCtx)
 					return
 				}
 			}
 		case ev := <-s.ingestCh:
-			batch = append(batch, ev)
-			if len(batch) >= s.ingestBatchSize {
-				flush(s.ctx)
+			process(ev)
+			if len(spill) >= s.ingestBatchSize {
+				flushSpill(s.ctx)
 			}
 		case <-ticker.C:
-			flush(s.ctx)
+			flushSpill(s.ctx)
 		}
 	}
 }
