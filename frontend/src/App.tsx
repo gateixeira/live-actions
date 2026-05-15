@@ -8,6 +8,7 @@ import { LabelDemand } from './components/LabelDemand'
 import { Sidebar } from './components/Sidebar'
 import { useSSE } from './hooks/useSSE'
 import { useThrottledLive } from './hooks/useThrottledLive'
+import { usePausableLive } from './hooks/usePausableLive'
 import { getMetrics, getRepositories, initCsrf } from './api/client'
 import type { MetricsResponse, Period } from './api/types'
 
@@ -48,13 +49,20 @@ export default function App() {
   // interaction ends or on the next 30s tick.
   const [interacting, setInteracting] = useState(false)
 
-  // Live values from SSE are buffered and committed at most every 30s. They
-  // do not trigger a re-render on every event, so the table can be browsed
-  // without flicker.
-  const [liveRunning, setLiveRunningLatest] = useThrottledLive<number | null>(null, {
+  // Refresh model:
+  //   - SSE is the single source of truth for the live `running`/`queued`
+  //     counters; updates land on the cards as soon as they arrive (paused
+  //     while the user is interacting with the table to avoid jitter).
+  //   - The 30s REST poll only refreshes the chart history and the
+  //     aggregate metrics (avg_queue_time / avg_run_time / peak_demand). Its
+  //     `current_metrics.running_jobs/queued_jobs` is used solely as the
+  //     initial seed before the first SSE event arrives.
+  //   - WorkflowTable refetches on workflow_update, but throttled to 30s so
+  //     a burst of events does not trigger a refetch storm.
+  const [liveRunning, setLiveRunningLatest] = usePausableLive<number | null>(null, {
     paused: interacting,
   })
-  const [liveQueued, setLiveQueuedLatest] = useThrottledLive<number | null>(null, {
+  const [liveQueued, setLiveQueuedLatest] = usePausableLive<number | null>(null, {
     paused: interacting,
   })
   const [workflowRefresh, bumpWorkflowRefresh] = useThrottledLive<number>(0, {
