@@ -165,12 +165,13 @@ func SetupAndRun(staticFS embed.FS) {
 	)
 	if cfg.Vars.WebhookTransport == "websocket" {
 		sub, err := ghws.NewSubscriber(ghws.Config{
-			Token:  cfg.Vars.GitHubToken,
-			Host:   cfg.Vars.GitHubHost,
-			Repo:   cfg.Vars.GitHubRepo,
-			Org:    cfg.Vars.GitHubOrg,
-			Events: splitEvents(cfg.Vars.GitHubEvents),
-			Secret: cfg.Vars.WebhookSecret,
+			Token:      cfg.Vars.GitHubToken,
+			Host:       cfg.Vars.GitHubHost,
+			Repo:       cfg.Vars.GitHubRepo,
+			Org:        cfg.Vars.GitHubOrg,
+			Enterprise: cfg.Vars.GitHubEnterprise,
+			Events:     splitEvents(cfg.Vars.GitHubEvents),
+			Secret:     cfg.Vars.WebhookSecret,
 		}, ingestAdapter{h: webhookHandler})
 		if err != nil {
 			logger.Logger.Fatal("Invalid WebSocket subscriber config", zap.Error(err))
@@ -186,6 +187,7 @@ func SetupAndRun(staticFS embed.FS) {
 		logger.Logger.Info("WebSocket transport enabled",
 			zap.String("repo", cfg.Vars.GitHubRepo),
 			zap.String("org", cfg.Vars.GitHubOrg),
+			zap.String("enterprise", cfg.Vars.GitHubEnterprise),
 			zap.String("events", cfg.Vars.GitHubEvents))
 	} else {
 		close(wsDone)

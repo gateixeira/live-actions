@@ -102,8 +102,9 @@ The UI updates in real time via Server-Sent Events — no manual refresh needed.
 | `CLEANUP_INTERVAL_HOURS` | `24` | How often to run data cleanup |
 | `WEBHOOK_TRANSPORT` | `http` | How webhooks reach the app: `http` (public endpoint) or `websocket` (relay, no public endpoint needed) |
 | `GITHUB_TOKEN` | *(required for `websocket`)* | Token with `admin:repo_hook` (per-repo) or `admin:org_hook` (per-org) scope. `gh auth token` works. |
-| `GITHUB_REPO` | | `owner/repo` to subscribe to. Mutually exclusive with `GITHUB_ORG`. |
-| `GITHUB_ORG` | | Org login to subscribe to. Mutually exclusive with `GITHUB_REPO`. |
+| `GITHUB_REPO` | | `owner/repo` to subscribe to. Mutually exclusive with `GITHUB_ORG` and `GITHUB_ENTERPRISE`. |
+| `GITHUB_ORG` | | Org login to subscribe to. Mutually exclusive with `GITHUB_REPO` and `GITHUB_ENTERPRISE`. |
+| `GITHUB_ENTERPRISE` | | Enterprise slug to subscribe to. Mutually exclusive with `GITHUB_REPO` and `GITHUB_ORG`. See enterprise caveat below. |
 | `GITHUB_EVENTS` | `workflow_run,workflow_job` | Comma-separated event types for the WebSocket subscription (use `*` for all). |
 | `GITHUB_HOST` | `github.com` | GitHub host (set to your GHES hostname when applicable). |
 
@@ -170,6 +171,22 @@ export GITHUB_TOKEN=$(gh auth token)   # needs admin:org_hook scope
 export GITHUB_ORG=my-org
 make run
 ```
+
+**Per-enterprise:**
+
+```bash
+export WEBHOOK_TRANSPORT=websocket
+export GITHUB_TOKEN=$(gh auth token)   # needs manage_webhooks (or site_admin) scope
+export GITHUB_ENTERPRISE=my-enterprise
+make run
+```
+
+> **Note on enterprise mode:** the upstream `gh webhook` CLI only supports
+> repo and org hooks; enterprise support here uses the same protocol against
+> `POST /enterprises/{slug}/hooks` but the relay (`webhook.gh.io`) is not
+> known to be exercised at the enterprise level. It may or may not return a
+> usable `ws_url` depending on whether your account has the feature enabled
+> at that scope. Test in a non-critical environment first.
 
 **Caveats:**
 

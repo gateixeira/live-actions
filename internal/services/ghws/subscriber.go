@@ -58,10 +58,16 @@ type Config struct {
 	// Host is the GitHub API host. Use "github.com" for github.com, or a
 	// GHES hostname.
 	Host string
-	// Repo is "owner/repo". Mutually exclusive with Org.
+	// Repo is "owner/repo". Mutually exclusive with Org and Enterprise.
 	Repo string
-	// Org is "org-name". Mutually exclusive with Repo.
+	// Org is "org-name". Mutually exclusive with Repo and Enterprise.
 	Org string
+	// Enterprise is the enterprise slug. Mutually exclusive with Repo and
+	// Org. Note: GitHub's relay support for enterprise-level hooks is not
+	// exercised by the upstream `gh webhook` CLI, so behaviour here is
+	// best-effort and may require an account that has the relay feature
+	// enabled at the enterprise level.
+	Enterprise string
 	// Events are the webhook event types to subscribe to. Use ["*"] for all.
 	Events []string
 	// Secret is the optional webhook signing secret. Currently informational;
@@ -75,11 +81,21 @@ func (c *Config) Validate() error {
 	if c.Token == "" {
 		return errors.New("GitHub token is required")
 	}
-	if c.Repo == "" && c.Org == "" {
-		return errors.New("either Repo or Org is required")
+	set := 0
+	if c.Repo != "" {
+		set++
 	}
-	if c.Repo != "" && c.Org != "" {
-		return errors.New("only one of Repo or Org may be set")
+	if c.Org != "" {
+		set++
+	}
+	if c.Enterprise != "" {
+		set++
+	}
+	if set == 0 {
+		return errors.New("one of Repo, Org, or Enterprise is required")
+	}
+	if set > 1 {
+		return errors.New("only one of Repo, Org, or Enterprise may be set")
 	}
 	if len(c.Events) == 0 {
 		return errors.New("at least one event type is required")
@@ -203,6 +219,7 @@ func (s *Subscriber) runOnce(ctx context.Context) error {
 	logger.Logger.Info("WebSocket subscriber connected to GitHub relay",
 		zap.String("repo", s.cfg.Repo),
 		zap.String("org", s.cfg.Org),
+		zap.String("enterprise", s.cfg.Enterprise),
 		zap.Int("hook_id", hook.ID))
 
 	// Tear the connection down when ctx is cancelled.
@@ -291,10 +308,14 @@ type createHookRequest struct {
 }
 
 func (s *Subscriber) hookPath() string {
-	if s.cfg.Org != "" {
+	switch {
+	case s.cfg.Enterprise != "":
+		return "/enterprises/" + s.cfg.Enterprise + "/hooks"
+	case s.cfg.Org != "":
 		return "/orgs/" + s.cfg.Org + "/hooks"
+	default:
+		return "/repos/" + s.cfg.Repo + "/hooks"
 	}
-	return "/repos/" + s.cfg.Repo + "/hooks"
 }
 
 // createHook posts a new dev webhook and returns the relay coordinates.

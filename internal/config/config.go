@@ -29,6 +29,7 @@ type Vars struct {
 	GitHubHost       string
 	GitHubRepo       string // owner/repo
 	GitHubOrg        string
+	GitHubEnterprise string // enterprise slug
 	GitHubEvents     string // comma-separated list, default "workflow_job,workflow_run"
 }
 
@@ -54,6 +55,7 @@ func NewConfig() (*Config, error) {
 		GitHubHost:       getEnvOrDefault("GITHUB_HOST", "github.com"),
 		GitHubRepo:       os.Getenv("GITHUB_REPO"),
 		GitHubOrg:        os.Getenv("GITHUB_ORG"),
+		GitHubEnterprise: os.Getenv("GITHUB_ENTERPRISE"),
 		GitHubEvents:     getEnvOrDefault("GITHUB_EVENTS", "workflow_job,workflow_run"),
 	}
 
@@ -76,11 +78,21 @@ func NewConfig() (*Config, error) {
 		if vars.GitHubToken == "" {
 			return nil, fmt.Errorf("GITHUB_TOKEN is required when WEBHOOK_TRANSPORT=websocket")
 		}
-		if vars.GitHubRepo == "" && vars.GitHubOrg == "" {
-			return nil, fmt.Errorf("GITHUB_REPO or GITHUB_ORG is required when WEBHOOK_TRANSPORT=websocket")
+		set := 0
+		if vars.GitHubRepo != "" {
+			set++
 		}
-		if vars.GitHubRepo != "" && vars.GitHubOrg != "" {
-			return nil, fmt.Errorf("set only one of GITHUB_REPO and GITHUB_ORG")
+		if vars.GitHubOrg != "" {
+			set++
+		}
+		if vars.GitHubEnterprise != "" {
+			set++
+		}
+		if set == 0 {
+			return nil, fmt.Errorf("one of GITHUB_REPO, GITHUB_ORG, or GITHUB_ENTERPRISE is required when WEBHOOK_TRANSPORT=websocket")
+		}
+		if set > 1 {
+			return nil, fmt.Errorf("set only one of GITHUB_REPO, GITHUB_ORG, and GITHUB_ENTERPRISE")
 		}
 	}
 
