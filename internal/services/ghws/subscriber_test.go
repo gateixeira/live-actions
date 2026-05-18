@@ -62,8 +62,8 @@ func TestSubscriber_HappyPath(t *testing.T) {
 			http.Error(w, "bad", http.StatusBadRequest)
 			return
 		}
-		if got := r.Header.Get("Authorization"); got != "tok" {
-			t.Errorf("create-hook Authorization = %q, want %q", got, "tok")
+		if got := r.Header.Get("Authorization"); got != "Bearer tok" {
+			t.Errorf("create-hook Authorization = %q, want %q", got, "Bearer tok")
 		}
 		// We don't know srv.URL until later; the test patches the response
 		// before serving by closing over a pointer to it.

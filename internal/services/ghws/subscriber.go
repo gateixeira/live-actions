@@ -409,10 +409,10 @@ func (s *Subscriber) deleteHook(ctx context.Context, hook *hookResponse) {
 }
 
 func (s *Subscriber) applyAuth(req *http.Request) {
-	// GitHub accepts either Bearer or the bare token; the relay expects the
-	// bare token in its Authorization header, so we use the same form here
-	// for consistency.
-	req.Header.Set("Authorization", s.cfg.Token)
+	// REST calls go through the standard GitHub API, which requires the
+	// "Bearer" (or "token") prefix. The WebSocket dial uses the bare token
+	// form because that's what the relay expects (see Run/runOnce).
+	req.Header.Set("Authorization", "Bearer "+s.cfg.Token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 }
