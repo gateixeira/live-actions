@@ -142,25 +142,25 @@ func (r *Registry) ResetJobsByLabel() {
 // once at startup. Errors from duplicate registration are ignored so tests
 // that re-init the global registry do not panic.
 func (r *Registry) RegisterIngestQueueDepth(depth func() float64) {
-g := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-Name: "live_actions_ingest_queue_depth",
-Help: "Current number of events buffered in the in-memory ingest queue",
-}, depth)
-_ = prometheus.Register(g)
+	g := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "live_actions_ingest_queue_depth",
+		Help: "Current number of events buffered in the in-memory ingest queue",
+	}, depth)
+	_ = prometheus.Register(g)
 }
 
 // RegisterSSESubscribers registers a GaugeFunc that reports the number of
 // connected SSE clients by calling the supplied closure on every scrape.
 func (r *Registry) RegisterSSESubscribers(count func() float64) {
-g := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-Name: "live_actions_sse_subscribers",
-Help: "Current number of connected SSE clients",
-}, count)
-_ = prometheus.Register(g)
+	g := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "live_actions_sse_subscribers",
+		Help: "Current number of connected SSE clients",
+	}, count)
+	_ = prometheus.Register(g)
 }
 
 // RegisterDBStats wires the standard database/sql DBStats collector for the
 // supplied pool, namespaced by the given pool name (e.g. "write", "read").
 func (r *Registry) RegisterDBStats(name string, db *sql.DB) {
-_ = prometheus.Register(collectors.NewDBStatsCollector(db, name))
+	_ = prometheus.Register(collectors.NewDBStatsCollector(db, name))
 }

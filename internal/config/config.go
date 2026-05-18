@@ -40,14 +40,14 @@ type Config struct {
 // NewConfig creates and initializes a new application config.
 func NewConfig() (*Config, error) {
 	vars := Vars{
-		WebhookSecret:        os.Getenv("WEBHOOK_SECRET"),
-		Port:                 getEnvOrDefault("PORT", "8080"),
-		DatabasePath:         getEnvOrDefault("DATABASE_PATH", "./data/live-actions.db"),
-		LogLevel:             getEnvOrDefault("LOG_LEVEL", "info"),
-		TLSEnabled:           getEnvOrDefault("TLS_ENABLED", "false") == "true",
-		Environment:          getEnvOrDefault("ENVIRONMENT", "development"),
-		DataRetentionDays:      getEnvOrDefaultInt("DATA_RETENTION_DAYS", 30),      // Default 1 month
-		CleanupIntervalHours:   getEnvOrDefaultInt("CLEANUP_INTERVAL_HOURS", 24),   // Daily cleanup
+		WebhookSecret:          os.Getenv("WEBHOOK_SECRET"),
+		Port:                   getEnvOrDefault("PORT", "8080"),
+		DatabasePath:           getEnvOrDefault("DATABASE_PATH", "./data/live-actions.db"),
+		LogLevel:               getEnvOrDefault("LOG_LEVEL", "info"),
+		TLSEnabled:             getEnvOrDefault("TLS_ENABLED", "false") == "true",
+		Environment:            getEnvOrDefault("ENVIRONMENT", "development"),
+		DataRetentionDays:      getEnvOrDefaultInt("DATA_RETENTION_DAYS", 30),       // Default 1 month
+		CleanupIntervalHours:   getEnvOrDefaultInt("CLEANUP_INTERVAL_HOURS", 24),    // Daily cleanup
 		StaleJobThresholdHours: getEnvOrDefaultInt("STALE_JOB_THRESHOLD_HOURS", 24), // Jobs queued/in_progress longer than this are considered stale
 
 		WebhookTransport: getEnvOrDefault("WEBHOOK_TRANSPORT", "http"),

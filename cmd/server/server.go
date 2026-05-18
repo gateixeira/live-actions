@@ -238,12 +238,12 @@ func spaFallbackHandler(indexHTML []byte) gin.HandlerFunc {
 // suitable for ghws.Config. Whitespace is trimmed and empty entries are
 // dropped so trailing/duplicate commas are forgiving.
 func splitEvents(s string) []string {
-parts := strings.Split(s, ",")
-out := make([]string, 0, len(parts))
-for _, p := range parts {
-if t := strings.TrimSpace(p); t != "" {
-out = append(out, t)
-}
-}
-return out
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }

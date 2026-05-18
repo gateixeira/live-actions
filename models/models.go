@@ -152,19 +152,19 @@ type FailingJob struct {
 
 // FailureAnalytics contains summary failure metrics.
 type FailureAnalytics struct {
-	TotalCompleted  int          `json:"total_completed"`
-	TotalFailed     int          `json:"total_failed"`
-	TotalCancelled  int          `json:"total_cancelled"`
-	FailureRate     float64      `json:"failure_rate"`
-	TopFailingJobs  []FailingJob `json:"top_failing_jobs"`
+	TotalCompleted int          `json:"total_completed"`
+	TotalFailed    int          `json:"total_failed"`
+	TotalCancelled int          `json:"total_cancelled"`
+	FailureRate    float64      `json:"failure_rate"`
+	TopFailingJobs []FailingJob `json:"top_failing_jobs"`
 }
 
 // FailureTrendPoint represents failure counts at a point in time.
 type FailureTrendPoint struct {
-	Timestamp  int64 `json:"timestamp"`
-	Failures   int   `json:"failures"`
-	Successes  int   `json:"successes"`
-	Cancelled  int   `json:"cancelled"`
+	Timestamp int64 `json:"timestamp"`
+	Failures  int   `json:"failures"`
+	Successes int   `json:"successes"`
+	Cancelled int   `json:"cancelled"`
 }
 
 // LabelDemandSummary represents aggregate demand stats for a single runner label.
