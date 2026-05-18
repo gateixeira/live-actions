@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"embed"
+	"errors"
 	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gateixeira/live-actions/handlers"
@@ -14,11 +16,22 @@ import (
 	"github.com/gateixeira/live-actions/internal/database"
 	"github.com/gateixeira/live-actions/internal/middleware"
 	"github.com/gateixeira/live-actions/internal/services"
+	"github.com/gateixeira/live-actions/internal/services/ghws"
 	"github.com/gateixeira/live-actions/pkg/logger"
 	pkgmetrics "github.com/gateixeira/live-actions/pkg/metrics"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
+
+// ingestAdapter bridges the *handlers.WebhookHandler.Ingest signature into
+// the ghws.Ingester interface so the ghws package has no compile-time
+// dependency on the handlers package.
+type ingestAdapter struct{ h *handlers.WebhookHandler }
+
+func (a ingestAdapter) Ingest(eventType, deliveryID string, body []byte) ghws.IngestResult {
+	r := a.h.Ingest(eventType, deliveryID, body)
+	return ghws.IngestResult{Status: r.Status, Message: r.Message}
+}
 
 // SetupAndRun configures the router and starts the server
 func SetupAndRun(staticFS embed.FS) {
@@ -144,6 +157,40 @@ func SetupAndRun(staticFS embed.FS) {
 	go metricsService.Start()
 	go gracefulShutdown.Start()
 
+	// Optional: open a WebSocket relay subscription so deliveries can flow
+	// without a publicly reachable HTTP endpoint.
+	var (
+		wsCancel context.CancelFunc
+		wsDone   = make(chan struct{})
+	)
+	if cfg.Vars.WebhookTransport == "websocket" {
+		sub, err := ghws.NewSubscriber(ghws.Config{
+			Token:  cfg.Vars.GitHubToken,
+			Host:   cfg.Vars.GitHubHost,
+			Repo:   cfg.Vars.GitHubRepo,
+			Org:    cfg.Vars.GitHubOrg,
+			Events: splitEvents(cfg.Vars.GitHubEvents),
+			Secret: cfg.Vars.WebhookSecret,
+		}, ingestAdapter{h: webhookHandler})
+		if err != nil {
+			logger.Logger.Fatal("Invalid WebSocket subscriber config", zap.Error(err))
+		}
+		var wsCtx context.Context
+		wsCtx, wsCancel = context.WithCancel(context.Background())
+		go func() {
+			defer close(wsDone)
+			if err := sub.Run(wsCtx); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Logger.Error("WebSocket subscriber exited with error", zap.Error(err))
+			}
+		}()
+		logger.Logger.Info("WebSocket transport enabled",
+			zap.String("repo", cfg.Vars.GitHubRepo),
+			zap.String("org", cfg.Vars.GitHubOrg),
+			zap.String("events", cfg.Vars.GitHubEvents))
+	} else {
+		close(wsDone)
+	}
+
 	logger.Logger.Info("Starting server",
 		zap.String("port", cfg.Vars.Port),
 		zap.String("environment", cfg.Vars.Environment),
@@ -163,6 +210,10 @@ func SetupAndRun(staticFS embed.FS) {
 	gracefulShutdown.Wait()
 
 	// Stop services
+	if wsCancel != nil {
+		wsCancel()
+		<-wsDone
+	}
 	webhookHandler.Shutdown()
 	cleanupService.Stop()
 	metricsService.Stop()
@@ -179,4 +230,18 @@ func spaFallbackHandler(indexHTML []byte) gin.HandlerFunc {
 
 		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	}
+}
+
+// splitEvents parses a comma-separated GITHUB_EVENTS value into a slice
+// suitable for ghws.Config. Whitespace is trimmed and empty entries are
+// dropped so trailing/duplicate commas are forgiving.
+func splitEvents(s string) []string {
+parts := strings.Split(s, ",")
+out := make([]string, 0, len(parts))
+for _, p := range parts {
+if t := strings.TrimSpace(p); t != "" {
+out = append(out, t)
+}
+}
+return out
 }

@@ -17,6 +17,19 @@ type Vars struct {
 	DataRetentionDays      int
 	CleanupIntervalHours   int
 	StaleJobThresholdHours int
+
+	// WebhookTransport selects how GitHub deliveries reach this server.
+	// "http"      (default): the server only listens on POST /webhook and
+	//                        relies on GitHub being able to reach it.
+	// "websocket":           additionally opens a long-lived WebSocket
+	//                        relay (see internal/services/ghws). The HTTP
+	//                        endpoint stays registered either way.
+	WebhookTransport string
+	GitHubToken      string
+	GitHubHost       string
+	GitHubRepo       string // owner/repo
+	GitHubOrg        string
+	GitHubEvents     string // comma-separated list, default "workflow_job,workflow_run"
 }
 
 type Config struct {
@@ -35,6 +48,13 @@ func NewConfig() (*Config, error) {
 		DataRetentionDays:      getEnvOrDefaultInt("DATA_RETENTION_DAYS", 30),      // Default 1 month
 		CleanupIntervalHours:   getEnvOrDefaultInt("CLEANUP_INTERVAL_HOURS", 24),   // Daily cleanup
 		StaleJobThresholdHours: getEnvOrDefaultInt("STALE_JOB_THRESHOLD_HOURS", 24), // Jobs queued/in_progress longer than this are considered stale
+
+		WebhookTransport: getEnvOrDefault("WEBHOOK_TRANSPORT", "http"),
+		GitHubToken:      os.Getenv("GITHUB_TOKEN"),
+		GitHubHost:       getEnvOrDefault("GITHUB_HOST", "github.com"),
+		GitHubRepo:       os.Getenv("GITHUB_REPO"),
+		GitHubOrg:        os.Getenv("GITHUB_ORG"),
+		GitHubEvents:     getEnvOrDefault("GITHUB_EVENTS", "workflow_job,workflow_run"),
 	}
 
 	config := &Config{Vars: vars}
@@ -43,6 +63,24 @@ func NewConfig() (*Config, error) {
 	if config.IsProduction() {
 		if vars.WebhookSecret == "" {
 			return nil, fmt.Errorf("WEBHOOK_SECRET is required in production")
+		}
+	}
+
+	switch vars.WebhookTransport {
+	case "http", "websocket":
+	default:
+		return nil, fmt.Errorf("WEBHOOK_TRANSPORT must be \"http\" or \"websocket\", got %q", vars.WebhookTransport)
+	}
+
+	if vars.WebhookTransport == "websocket" {
+		if vars.GitHubToken == "" {
+			return nil, fmt.Errorf("GITHUB_TOKEN is required when WEBHOOK_TRANSPORT=websocket")
+		}
+		if vars.GitHubRepo == "" && vars.GitHubOrg == "" {
+			return nil, fmt.Errorf("GITHUB_REPO or GITHUB_ORG is required when WEBHOOK_TRANSPORT=websocket")
+		}
+		if vars.GitHubRepo != "" && vars.GitHubOrg != "" {
+			return nil, fmt.Errorf("set only one of GITHUB_REPO and GITHUB_ORG")
 		}
 	}
 
