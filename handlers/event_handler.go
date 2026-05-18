@@ -41,3 +41,10 @@ func NewWebhookHandler(config *config.Config, db database.DatabaseInterface) *We
 func (h *WebhookHandler) RegisterHandler(handler EventHandler) {
 	h.handlers[handler.GetEventType()] = handler
 }
+
+// OrderingService returns the underlying EventOrderingService so callers
+// (e.g. the readiness handler and metrics registration) can inspect queue
+// depth/capacity. May be nil before Start() / after Shutdown().
+func (h *WebhookHandler) OrderingService() *services.EventOrderingService {
+	return h.orderingService
+}

@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/gateixeira/live-actions/internal/config"
+	"github.com/gateixeira/live-actions/internal/services"
 	"github.com/gateixeira/live-actions/models"
 	"github.com/gateixeira/live-actions/pkg/logger"
+	"github.com/gateixeira/live-actions/pkg/metrics"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -185,6 +187,7 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 		handler, exists := h.handlers[eventTypeStr]
 		if !exists {
 			logger.Logger.Warn("No handler registered for event type", zap.String("event_type", eventTypeStr))
+			metrics.GetRegistry().WebhookEventsTotal.WithLabelValues(eventTypeStr, "ignored").Inc()
 			c.JSON(http.StatusOK, gin.H{"status": "ignored", "message": "Event type not supported"})
 			return
 		}
@@ -195,6 +198,7 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 				zap.Error(err),
 				zap.String("event_type", eventTypeStr),
 				zap.String("delivery_id", deliveryID))
+			metrics.GetRegistry().WebhookEventsTotal.WithLabelValues(eventTypeStr, "rejected_invalid").Inc()
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to extract event timestamp"})
 			return
 		}
@@ -205,6 +209,7 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 				zap.Error(err),
 				zap.String("event_type", eventTypeStr),
 				zap.String("delivery_id", deliveryID))
+			metrics.GetRegistry().WebhookEventsTotal.WithLabelValues(eventTypeStr, "rejected_invalid").Inc()
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to extract ordering key"})
 			return
 		}
@@ -215,6 +220,7 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 				zap.Error(err),
 				zap.String("event_type", eventTypeStr),
 				zap.String("delivery_id", deliveryID))
+			metrics.GetRegistry().WebhookEventsTotal.WithLabelValues(eventTypeStr, "rejected_invalid").Inc()
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to extract status priority"})
 			return
 		}
@@ -233,10 +239,21 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 		}
 
 		if err := h.orderingService.AddEvent(orderedEvent); err != nil {
+			if errors.Is(err, services.ErrIngestQueueFull) {
+				logger.Logger.Error("Webhook ingest queue full; rejecting delivery",
+					zap.String("delivery_id", deliveryID),
+					zap.String("event_type", eventTypeStr))
+				metrics.GetRegistry().WebhookEventsTotal.WithLabelValues(eventTypeStr, "rejected_queue_full").Inc()
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Server overloaded; manual redelivery required"})
+				return
+			}
 			logger.Logger.Error("Failed to add event to ordering service", zap.Error(err))
+			metrics.GetRegistry().WebhookEventsTotal.WithLabelValues(eventTypeStr, "rejected_invalid").Inc()
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process event"})
 			return
 		}
+
+		metrics.GetRegistry().WebhookEventsTotal.WithLabelValues(eventTypeStr, "accepted").Inc()
 
 		logger.Logger.Debug("Event queued for ordered processing",
 			zap.String("event_type", orderedEvent.EventType),
@@ -250,17 +267,15 @@ func (h *WebhookHandler) Handle() gin.HandlerFunc {
 }
 
 func (h *WebhookHandler) processOrderedEvent(event *models.OrderedEvent) error {
-
-	if err := h.db.StoreWebhookEvent(context.TODO(), event); err != nil {
-		logger.Logger.Error("Failed to store webhook event", zap.Error(err))
-		//log and continue
-	}
+	// On the happy path the event arrives straight from the in-memory ingest
+	// channel and was never written to webhook_events; only spilled events
+	// (event.Persisted == true) need MarkEventProcessed/MarkEventFailed.
 
 	handler, exists := h.handlers[event.EventType]
 
 	if !exists {
 		logger.Logger.Warn("No handler registered for event type", zap.String("event_type", event.EventType))
-		return fmt.Errorf("event type not supported: %s", event.EventType)
+		return fmt.Errorf("event type %s: %w", event.EventType, services.ErrPermanent)
 	}
 
 	jsonData := event.RawPayload
@@ -270,11 +285,16 @@ func (h *WebhookHandler) processOrderedEvent(event *models.OrderedEvent) error {
 		logger.Logger.Error("Failed to handle event", zap.Error(err),
 			zap.String("event_type", event.EventType),
 			zap.String("delivery_id", event.Sequence.DeliveryID))
-		_ = h.db.MarkEventFailed(context.TODO(), event.Sequence.DeliveryID)
+		if event.Persisted {
+			_ = h.db.MarkEventFailed(context.TODO(), event.Sequence.DeliveryID)
+		}
 		return fmt.Errorf("failed to handle event: %w", err)
 	}
 
-	return h.db.MarkEventProcessed(context.TODO(), event.Sequence.DeliveryID)
+	if event.Persisted {
+		return h.db.MarkEventProcessed(context.TODO(), event.Sequence.DeliveryID)
+	}
+	return nil
 }
 
 func (h *WebhookHandler) Shutdown() {

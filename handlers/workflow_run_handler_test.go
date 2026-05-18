@@ -14,6 +14,7 @@ import (
 )
 
 func setupWorkflowRunTest() *database.MockDatabase {
+	stopLeakedSSECoalescer()
 	// Initialize logger for tests
 	logger.InitLogger("error")
 
@@ -654,7 +655,7 @@ func TestWorkflowRunHandler_GetStatusPriority(t *testing.T) {
 				data, _ := json.Marshal(event)
 				return data
 			}(),
-			expectedPriority: 999, // Default for unknown status
+			expectedPriority: 0, // Unknown status is rejected with priority 0
 			expectError:      false,
 		},
 		{

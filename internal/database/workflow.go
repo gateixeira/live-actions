@@ -37,30 +37,66 @@ func labelsFromJSON(s string) []string {
 	return labels
 }
 
-// AddOrUpdateJob adds or updates a workflow job with atomicity checks.
-// It prevents older events from overwriting newer terminal states.
-// Returns (updated, error) where updated indicates if the job was actually updated.
+// AddOrUpdateJob adds or updates a workflow job, enforcing the lifecycle
+// transition rules so the typed-table write is order-independent. Returns
+// (updated, error) where updated indicates whether the row was actually
+// changed; a rejected transition (e.g. a late lower-priority event) returns
+// (false, nil), not an error.
+//
+// Transition rules:
+//   - existing absent: insert
+//   - incoming status unknown: reject (false, nil)
+//   - existing terminal AND incoming status equals existing: idempotent no-op
+//     (false, nil); the row is already at the right final state
+//   - existing terminal AND incoming status differs: reject (false, nil) so a
+//     late `cancelled` cannot overwrite a recorded `completed` and vice versa
+//   - existing non-terminal AND incoming priority < existing priority:
+//     reject (false, nil), preserving lifecycle monotonicity
+//   - otherwise: apply the upsert
+//
+// `eventTimestamp` is currently informational; ordering is decided by
+// status priority, not wall-clock timestamps.
 func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.WorkflowJob, eventTimestamp time.Time) (bool, error) {
-	tx, err := db.db.BeginTx(ctx, nil)
+	incomingPrio, ok := models.JobStatusPriority(workflowJob.Status)
+	if !ok {
+		// Defence in depth: handlers reject unknown statuses up-front, but
+		// callers (tests, future code paths) might not.
+		return false, nil
+	}
+
+	tx, err := db.writeDB.BeginTx(ctx, nil)
 	if err != nil {
 		time.Sleep(time.Millisecond * 100)
 		return false, fmt.Errorf("failed to start transaction: %w", err)
 	}
 
-	var isTerminal bool
-	err = tx.QueryRow(`
-		SELECT CASE WHEN status IN ('completed', 'cancelled', 'stale') THEN 1 ELSE 0 END
-		FROM workflow_jobs 
-		WHERE id = ?`, workflowJob.ID).Scan(&isTerminal)
-
+	var existingStatus string
+	err = tx.QueryRow(`SELECT status FROM workflow_jobs WHERE id = ?`, workflowJob.ID).
+		Scan(&existingStatus)
 	if err != nil && err != sql.ErrNoRows {
 		_ = tx.Rollback()
-		return false, fmt.Errorf("failed to check terminal state: %w", err)
+		return false, fmt.Errorf("failed to load existing job status: %w", err)
 	}
 
-	if err == nil && isTerminal {
-		_ = tx.Rollback()
-		return false, nil
+	if err == nil {
+		// Row exists: enforce transition rules.
+		existing := models.JobStatus(existingStatus)
+		existingPrio, existingKnown := models.JobStatusPriority(existing)
+		switch {
+		case models.IsTerminalJobStatus(existing) && existing == workflowJob.Status:
+			// Idempotent replay of the final state — nothing to do.
+			_ = tx.Rollback()
+			return false, nil
+		case models.IsTerminalJobStatus(existing):
+			// Different terminal or any progression away from terminal:
+			// reject so the historical record is preserved.
+			_ = tx.Rollback()
+			return false, nil
+		case existingKnown && incomingPrio < existingPrio:
+			// Older lifecycle event arriving late — drop it.
+			_ = tx.Rollback()
+			return false, nil
+		}
 	}
 
 	_, err = tx.Exec(
@@ -93,26 +129,42 @@ func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.Work
 	return true, nil
 }
 
+// AddOrUpdateRun adds or updates a workflow run, enforcing the same
+// lifecycle/terminal transition rules as AddOrUpdateJob (see that function's
+// doc comment). The run priority map is shorter (no waiting/queued).
 func (db *DBWrapper) AddOrUpdateRun(ctx context.Context, workflowRun models.WorkflowRun, eventTimestamp time.Time) (bool, error) {
-	tx, err := db.db.BeginTx(ctx, nil)
+	incomingPrio, ok := models.RunStatusPriority(workflowRun.Status)
+	if !ok {
+		return false, nil
+	}
+
+	tx, err := db.writeDB.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to start transaction: %w", err)
 	}
 
-	var isTerminal bool
-	err = tx.QueryRow(`
-		SELECT CASE WHEN status IN ('completed', 'cancelled') THEN 1 ELSE 0 END
-		FROM workflow_runs 
-		WHERE id = ?`, workflowRun.ID).Scan(&isTerminal)
-
+	var existingStatus string
+	err = tx.QueryRow(`SELECT status FROM workflow_runs WHERE id = ?`, workflowRun.ID).
+		Scan(&existingStatus)
 	if err != nil && err != sql.ErrNoRows {
 		_ = tx.Rollback()
-		return false, fmt.Errorf("failed to check terminal state: %w", err)
+		return false, fmt.Errorf("failed to load existing run status: %w", err)
 	}
 
-	if err == nil && isTerminal {
-		_ = tx.Rollback()
-		return false, nil
+	if err == nil {
+		existing := models.JobStatus(existingStatus)
+		existingPrio, existingKnown := models.RunStatusPriority(existing)
+		switch {
+		case models.IsTerminalRunStatus(existing) && existing == workflowRun.Status:
+			_ = tx.Rollback()
+			return false, nil
+		case models.IsTerminalRunStatus(existing):
+			_ = tx.Rollback()
+			return false, nil
+		case existingKnown && incomingPrio < existingPrio:
+			_ = tx.Rollback()
+			return false, nil
+		}
 	}
 
 	_, err = tx.Exec(
@@ -174,7 +226,7 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, lim
 	}
 
 	var totalCount int
-	err := db.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs "+where, args...).Scan(&totalCount)
+	err := db.readDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_runs "+where, args...).Scan(&totalCount)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return []models.WorkflowRun{}, 0, nil
@@ -183,7 +235,7 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, lim
 	}
 
 	queryArgs := append(args, limit, offset)
-	rows, err := db.db.QueryContext(ctx,
+	rows, err := db.readDB.QueryContext(ctx,
 		"SELECT id, name, status, repository, html_url, display_title, conclusion, created_at, run_started_at, updated_at FROM workflow_runs "+where+" ORDER BY created_at DESC LIMIT ? OFFSET ?",
 		queryArgs...)
 	if err != nil {
@@ -213,7 +265,7 @@ func (db *DBWrapper) GetWorkflowRunsPaginated(ctx context.Context, page int, lim
 
 // GetRepositories returns the distinct list of repository names.
 func (db *DBWrapper) GetRepositories(ctx context.Context) ([]string, error) {
-	rows, err := db.db.QueryContext(ctx,
+	rows, err := db.readDB.QueryContext(ctx,
 		"SELECT DISTINCT repository FROM workflow_runs WHERE repository != '' ORDER BY repository ASC")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repositories: %w", err)
@@ -238,7 +290,7 @@ func (db *DBWrapper) GetRepositories(ctx context.Context) ([]string, error) {
 }
 
 func (db *DBWrapper) GetWorkflowJobsByRunID(ctx context.Context, runID int64) ([]models.WorkflowJob, error) {
-	rows, err := db.db.QueryContext(ctx, "SELECT id, name, run_id, status, labels, html_url, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
+	rows, err := db.readDB.QueryContext(ctx, "SELECT id, name, run_id, status, labels, html_url, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +329,7 @@ func (db *DBWrapper) GetWorkflowJobByID(ctx context.Context, jobID int64) (model
 	var htmlUrl sql.NullString
 	var startedAt, completedAt sql.NullString
 
-	err := db.db.QueryRowContext(ctx, `
+	err := db.readDB.QueryRowContext(ctx, `
 		SELECT id, name, run_id, status, labels, html_url, conclusion, 
 			   created_at, started_at, completed_at 
 		FROM workflow_jobs 
@@ -306,7 +358,7 @@ func (db *DBWrapper) GetWorkflowJobByID(ctx context.Context, jobID int64) (model
 func (db *DBWrapper) CleanupOldData(ctx context.Context, retentionPeriod time.Duration) (int64, int64, int64, error) {
 	cutoffTime := time.Now().Add(-retentionPeriod).Format(time.RFC3339)
 
-	tx, err := db.db.BeginTx(ctx, nil)
+	tx, err := db.writeDB.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to start transaction: %w", err)
 	}
@@ -366,7 +418,7 @@ func (db *DBWrapper) CleanupOldData(ctx context.Context, retentionPeriod time.Du
 func (db *DBWrapper) CleanupStaleJobs(ctx context.Context, threshold time.Duration) (int64, error) {
 	cutoffTime := time.Now().Add(-threshold).Format(time.RFC3339)
 
-	result, err := db.db.ExecContext(ctx, `
+	result, err := db.writeDB.ExecContext(ctx, `
 		UPDATE workflow_jobs
 		SET status = 'stale', completed_at = CURRENT_TIMESTAMP
 		WHERE status IN ('queued', 'in_progress')
@@ -385,7 +437,7 @@ func (db *DBWrapper) CleanupStaleJobs(ctx context.Context, threshold time.Durati
 
 func (db *DBWrapper) GetCurrentJobCounts(ctx context.Context) (int, int, error) {
 	var running, queued int
-	err := db.db.QueryRowContext(ctx, `
+	err := db.readDB.QueryRowContext(ctx, `
 		SELECT 
 			COALESCE(SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END), 0)

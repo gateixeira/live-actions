@@ -16,7 +16,7 @@ func (db *DBWrapper) GetLabelDemandSummary(ctx context.Context, since time.Durat
 	repoJoin, repoArgs := jobRepoFilter(repo)
 	args := append([]interface{}{cutoff}, repoArgs...)
 
-	rows, err := db.db.QueryContext(ctx, `
+	rows, err := db.readDB.QueryContext(ctx, `
 		SELECT
 			json_extract(j.labels, '$[0]') AS label,
 			COUNT(*) AS total_jobs,
@@ -68,7 +68,7 @@ func (db *DBWrapper) GetLabelDemandTrend(ctx context.Context, since time.Duratio
 	repoJoin, repoArgs := jobRepoFilter(repo)
 	args := append([]interface{}{cutoff}, repoArgs...)
 
-	rows, err := db.db.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := db.readDB.QueryContext(ctx, fmt.Sprintf(`
 		SELECT
 			strftime('%s', j.created_at) AS bucket,
 			json_extract(j.labels, '$[0]') AS label,

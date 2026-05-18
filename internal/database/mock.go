@@ -47,6 +47,11 @@ func (m *MockDatabase) StoreWebhookEvent(ctx context.Context, event *models.Orde
 	return args.Error(0)
 }
 
+func (m *MockDatabase) StoreWebhookEvents(ctx context.Context, events []*models.OrderedEvent) error {
+	args := m.Called(ctx, events)
+	return args.Error(0)
+}
+
 func (m *MockDatabase) GetPendingEventsGrouped(ctx context.Context, limit int) ([]*models.OrderedEvent, error) {
 	args := m.Called(ctx, limit)
 	return args.Get(0).([]*models.OrderedEvent), args.Error(1)

@@ -17,7 +17,7 @@ func (db *DBWrapper) GetFailureAnalytics(ctx context.Context, since time.Duratio
 
 	var totalCompleted, totalFailed, totalCancelled int
 	args := append([]interface{}{cutoff}, repoArgs...)
-	err := db.db.QueryRowContext(ctx, `
+	err := db.readDB.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*),
 			COALESCE(SUM(CASE WHEN j.conclusion IN ('failure','timed_out') THEN 1 ELSE 0 END), 0),
@@ -33,7 +33,7 @@ func (db *DBWrapper) GetFailureAnalytics(ctx context.Context, since time.Duratio
 		failureRate = float64(totalFailed) / float64(totalCompleted) * 100
 	}
 
-	rows, err := db.db.QueryContext(ctx, `
+	rows, err := db.readDB.QueryContext(ctx, `
 		SELECT
 			j.name,
 			MAX(j.html_url) AS html_url,
@@ -91,7 +91,7 @@ func (db *DBWrapper) GetFailureTrend(ctx context.Context, since time.Duration, r
 	repoJoin, repoArgs := jobRepoFilter(repo)
 	args := append([]interface{}{cutoff}, repoArgs...)
 
-	rows, err := db.db.QueryContext(ctx, fmt.Sprintf(`
+	rows, err := db.readDB.QueryContext(ctx, fmt.Sprintf(`
 		SELECT
 			strftime('%s', j.completed_at) AS bucket,
 			COALESCE(SUM(CASE WHEN j.conclusion IN ('failure','timed_out') THEN 1 ELSE 0 END), 0),

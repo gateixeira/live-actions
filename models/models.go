@@ -91,6 +91,14 @@ type OrderedEvent struct {
 	ProcessedAt    *time.Time    `json:"processed_at,omitempty"`
 	OrderingKey    string        `json:"ordering_key"`
 	StatusPriority int           `json:"status_priority"`
+	// Persisted is true when this event was read back from the
+	// webhook_events spill table (cold path). On the happy path the event
+	// is processed straight off the in-memory ingest channel and never
+	// touches webhook_events, so Persisted stays false. The webhook
+	// processor uses this to decide whether to call MarkEventProcessed/
+	// MarkEventFailed; for non-persisted events that would write a row
+	// that doesn't exist.
+	Persisted bool `json:"-"`
 }
 
 type EventBuffer struct {

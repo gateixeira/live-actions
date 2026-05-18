@@ -15,6 +15,7 @@ import (
 	"github.com/gateixeira/live-actions/internal/middleware"
 	"github.com/gateixeira/live-actions/internal/services"
 	"github.com/gateixeira/live-actions/pkg/logger"
+	pkgmetrics "github.com/gateixeira/live-actions/pkg/metrics"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -42,30 +43,47 @@ func SetupAndRun(staticFS embed.FS) {
 		}
 	}
 
-	sqlDB, err := database.InitDB(dbPath)
+	writeDB, readDB, err := database.InitDB(dbPath)
 	if err != nil {
 		logger.Logger.Error("Failed to initialize database", zap.Error(err))
 		os.Exit(1)
 	}
 
 	defer func() {
-		if err := sqlDB.Close(); err != nil {
-			logger.Logger.Error("Failed to close database connection", zap.Error(err))
+		if err := writeDB.Close(); err != nil {
+			logger.Logger.Error("Failed to close database write connection", zap.Error(err))
+		}
+		if err := readDB.Close(); err != nil {
+			logger.Logger.Error("Failed to close database read connection", zap.Error(err))
 		}
 	}()
 
-	db := database.NewDBWrapper(sqlDB)
+	db := database.NewDBWrapper(writeDB, readDB)
 
 	ctx := context.Background()
 
 	cleanupService := services.NewCleanupService(cfg, db, ctx)
-	metricsService := services.NewMetricsUpdateService(db, 10*time.Second, ctx)
+	metricsService := services.NewMetricsUpdateService(db, 2*time.Second, ctx)
 
 	handlers.InitSSEHandler()
 	sseHandler := handlers.GetSSEHandler()
 	webhookHandler := handlers.NewWebhookHandler(cfg, db)
 	apiHandler := handlers.NewAPIHandler(cfg, db)
 	metricsHandler := handlers.NewMetricsHandler()
+
+	// Register dynamic Prometheus collectors now that pools and services exist.
+	pmReg := pkgmetrics.GetRegistry()
+	pmReg.RegisterDBStats("write", writeDB)
+	pmReg.RegisterDBStats("read", readDB)
+	if os := webhookHandler.OrderingService(); os != nil {
+		pmReg.IngestQueueCapacity.Set(float64(os.IngestQueueCap()))
+		pmReg.RegisterIngestQueueDepth(func() float64 {
+			return float64(os.IngestQueueLen())
+		})
+	}
+	pmReg.RegisterSSESubscribers(func() float64 {
+		return float64(sseHandler.SubscriberCount())
+	})
 
 	r := gin.New()
 
@@ -101,6 +119,7 @@ func SetupAndRun(staticFS embed.FS) {
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+	r.GET("/readyz", handlers.ReadyzHandler(writeDB, readDB, webhookHandler.OrderingService()))
 
 	// Serve the React SPA for all other routes
 	indexHTML, err := fs.ReadFile(staticFS, "frontend/dist/index.html")

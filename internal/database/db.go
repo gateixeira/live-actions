@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"net/url"
 	"path"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -16,40 +18,97 @@ import (
 //go:embed migrations/*.up.sql
 var migrationsFS embed.FS
 
-// InitDB initializes the SQLite database connection and runs migrations
-func InitDB(dsn string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", dsn)
+// connPragmas are applied to every new connection in both the write and read
+// pools via the DSN. Pragmas in SQLite are connection-scoped (except
+// journal_mode, which is persistent), so encoding them in the DSN guarantees
+// they are set on every pooled connection rather than only the first one.
+//
+// Performance-tuning pragmas:
+//   - cache_size=-65536 reserves up to 64 MiB of page cache per connection
+//     (negative values are interpreted as KiB by SQLite). With ~8 read
+//     connections plus the writer this caps cache memory at ~576 MiB and
+//     keeps hot indexes/pages resident, removing per-query disk hits.
+//   - temp_store=MEMORY keeps temporary tables, indexes and sort scratch in
+//     RAM instead of spilling to disk, which speeds up GROUP BY / ORDER BY
+//     queries used by the dashboard.
+//   - mmap_size=268435456 (256 MiB) lets SQLite memory-map the main database
+//     file for reads, bypassing the page cache for cold reads and reducing
+//     syscall overhead on pooled SELECTs.
+var connPragmas = []string{
+	"journal_mode(WAL)",
+	"busy_timeout(5000)",
+	"synchronous(NORMAL)",
+	"foreign_keys(ON)",
+	"cache_size(-65536)",
+	"temp_store(MEMORY)",
+	"mmap_size(268435456)",
+}
+
+// InitDB opens two *sql.DB handles against the same SQLite file:
+//   - writeDB: capped at 1 open connection because SQLite supports a single
+//     writer at a time. All INSERT/UPDATE/DELETE/BEGIN traffic goes here.
+//   - readDB: pooled for concurrent SELECTs. With WAL, readers do not block
+//     the writer and vice versa, so a slow analytics query no longer stalls
+//     webhook ingestion.
+//
+// Migrations are run on the writer.
+func InitDB(dsn string) (writeDB, readDB *sql.DB, err error) {
+	connDSN := buildDSN(dsn, connPragmas)
+
+	writeDB, err = sql.Open("sqlite", connDSN)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	if err = db.Ping(); err != nil {
-		return nil, err
+	if err = writeDB.Ping(); err != nil {
+		_ = writeDB.Close()
+		return nil, nil, err
 	}
+	writeDB.SetMaxOpenConns(1)
 
-	// SQLite pragmas for performance and reliability
-	pragmas := []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA synchronous=NORMAL",
-		"PRAGMA foreign_keys=ON",
+	readDB, err = sql.Open("sqlite", connDSN)
+	if err != nil {
+		_ = writeDB.Close()
+		return nil, nil, err
 	}
-	for _, p := range pragmas {
-		if _, err := db.Exec(p); err != nil {
-			return nil, fmt.Errorf("failed to set pragma %s: %w", p, err)
-		}
+	if err = readDB.Ping(); err != nil {
+		_ = writeDB.Close()
+		_ = readDB.Close()
+		return nil, nil, err
 	}
+	readPoolSize := runtime.NumCPU()
+	if readPoolSize < 4 {
+		readPoolSize = 4
+	}
+	readDB.SetMaxOpenConns(readPoolSize)
 
-	// SQLite handles concurrency at the file level; keep pool small
-	db.SetMaxOpenConns(1)
-
-	if err = RunMigrations(db); err != nil {
+	if err = RunMigrations(writeDB); err != nil {
 		logger.Logger.Error("Failed to run database migrations", zap.Error(err))
-		return nil, err
+		_ = writeDB.Close()
+		_ = readDB.Close()
+		return nil, nil, err
 	}
 
-	logger.Logger.Info("Database initialized successfully")
-	return db, nil
+	logger.Logger.Info("Database initialized successfully",
+		zap.Int("read_pool_size", readPoolSize),
+	)
+	return writeDB, readDB, nil
+}
+
+// buildDSN appends _pragma query parameters to the given dsn so the
+// modernc.org/sqlite driver applies them to every new connection in the pool.
+func buildDSN(dsn string, pragmas []string) string {
+	if len(pragmas) == 0 {
+		return dsn
+	}
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	parts := make([]string, 0, len(pragmas))
+	for _, p := range pragmas {
+		parts = append(parts, "_pragma="+url.QueryEscape(p))
+	}
+	return dsn + sep + strings.Join(parts, "&")
 }
 
 // RunMigrations applies pending SQL migration files from the embedded migrations/ directory.

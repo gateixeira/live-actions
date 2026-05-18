@@ -20,6 +20,7 @@ import (
 )
 
 func setupWebhookTest() (*gin.Engine, *config.Config) {
+	stopLeakedSSECoalescer()
 	logger.InitLogger("error")
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

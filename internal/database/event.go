@@ -30,7 +30,7 @@ func (db *DBWrapper) StoreWebhookEvent(ctx context.Context, event *models.Ordere
 	}
 
 	for range maxRetries {
-		_, err = db.db.ExecContext(ctx,
+		_, err = db.writeDB.ExecContext(ctx,
 			`INSERT INTO webhook_events (delivery_id, event_type, sequence_id, 
             github_timestamp, received_at, processed_at, raw_payload, status, ordering_key, status_priority) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -64,6 +64,84 @@ func (db *DBWrapper) StoreWebhookEvent(ctx context.Context, event *models.Ordere
 	return err
 }
 
+// StoreWebhookEvents inserts a batch of webhook events in a single
+// transaction. This is significantly faster than calling StoreWebhookEvent
+// per-event because SQLite's per-commit fsync cost is amortized across the
+// whole batch. Conflicts on delivery_id are resolved by overwriting the
+// existing row, matching StoreWebhookEvent's UPSERT semantics.
+//
+// Returns nil for an empty input.
+func (db *DBWrapper) StoreWebhookEvents(ctx context.Context, events []*models.OrderedEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	tx, err := db.writeDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin batch tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO webhook_events (delivery_id, event_type, sequence_id,
+            github_timestamp, received_at, processed_at, raw_payload, status, ordering_key, status_priority)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (delivery_id) DO UPDATE SET
+                event_type = excluded.event_type,
+                sequence_id = excluded.sequence_id,
+                github_timestamp = excluded.github_timestamp,
+                received_at = excluded.received_at,
+                processed_at = excluded.processed_at,
+                raw_payload = excluded.raw_payload,
+                status = excluded.status,
+                ordering_key = excluded.ordering_key,
+                status_priority = excluded.status_priority`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare batch insert: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, event := range events {
+		if event == nil {
+			continue
+		}
+
+		var rawPayloadStr string
+		if event.RawPayload != nil {
+			rawPayloadStr = string(event.RawPayload)
+		}
+
+		status := "pending"
+		if event.ProcessedAt != nil {
+			status = "processed"
+		}
+
+		var processedAt interface{}
+		if event.ProcessedAt != nil {
+			processedAt = event.ProcessedAt.Format(time.RFC3339)
+		}
+
+		if _, err := stmt.ExecContext(ctx,
+			event.Sequence.DeliveryID,
+			event.EventType,
+			event.Sequence.SequenceID,
+			event.Sequence.Timestamp.Format(time.RFC3339),
+			event.Sequence.ReceivedAt.Format(time.RFC3339),
+			processedAt,
+			rawPayloadStr,
+			status,
+			event.OrderingKey,
+			event.StatusPriority,
+		); err != nil {
+			return fmt.Errorf("failed to exec batch insert (delivery_id=%s): %w", event.Sequence.DeliveryID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit batch insert: %w", err)
+	}
+	return nil
+}
+
 func (db *DBWrapper) GetPendingEventsGrouped(ctx context.Context, limit int) ([]*models.OrderedEvent, error) {
 	query := `
         SELECT delivery_id, event_type, sequence_id, github_timestamp, received_at, 
@@ -73,7 +151,7 @@ func (db *DBWrapper) GetPendingEventsGrouped(ctx context.Context, limit int) ([]
         ORDER BY github_timestamp ASC, ordering_key ASC, status_priority ASC
         LIMIT ?`
 
-	rows, err := db.db.QueryContext(ctx, query, limit)
+	rows, err := db.readDB.QueryContext(ctx, query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pending events: %w", err)
 	}
@@ -109,6 +187,7 @@ func (db *DBWrapper) GetPendingEventsGrouped(ctx context.Context, limit int) ([]
 			event.ProcessedAt = &t
 		}
 		event.RawPayload = []byte(rawPayload)
+		event.Persisted = true
 
 		events = append(events, &event)
 	}
@@ -131,7 +210,7 @@ func (db *DBWrapper) GetPendingEventsByAge(ctx context.Context, maxAge time.Dura
         ORDER BY github_timestamp ASC, ordering_key ASC, status_priority ASC
         LIMIT ?`
 
-	rows, err := db.db.QueryContext(ctx, query, cutoff, limit)
+	rows, err := db.readDB.QueryContext(ctx, query, cutoff, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query pending events by age: %w", err)
 	}
@@ -167,6 +246,7 @@ func (db *DBWrapper) GetPendingEventsByAge(ctx context.Context, maxAge time.Dura
 			event.ProcessedAt = &t
 		}
 		event.RawPayload = []byte(rawPayload)
+		event.Persisted = true
 
 		events = append(events, &event)
 	}
@@ -180,7 +260,7 @@ func (db *DBWrapper) GetPendingEventsByAge(ctx context.Context, maxAge time.Dura
 
 func (db *DBWrapper) MarkEventProcessed(ctx context.Context, deliveryID string) error {
 	now := time.Now().Format(time.RFC3339)
-	_, err := db.db.ExecContext(ctx,
+	_, err := db.writeDB.ExecContext(ctx,
 		"UPDATE webhook_events SET status = 'processed', processed_at = ?, raw_payload = NULL WHERE delivery_id = ?",
 		now, deliveryID)
 	if err != nil {
@@ -190,7 +270,7 @@ func (db *DBWrapper) MarkEventProcessed(ctx context.Context, deliveryID string) 
 }
 
 func (db *DBWrapper) MarkEventFailed(ctx context.Context, deliveryID string) error {
-	_, err := db.db.ExecContext(ctx,
+	_, err := db.writeDB.ExecContext(ctx,
 		"UPDATE webhook_events SET status = 'failed' WHERE delivery_id = ?",
 		deliveryID)
 	if err != nil {

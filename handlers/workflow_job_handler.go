@@ -44,23 +44,39 @@ func (h *WorkflowJobHandler) HandleEvent(eventData []byte, sequence *models.Even
 
 	event.WorkflowJob.Status = models.JobStatus(event.Action)
 
+	// Reject unknown statuses up-front: handing them to AddOrUpdateJob would
+	// either silently no-op or, worse, treat them as the highest priority and
+	// poison the row. This is a permanent error — replaying the same payload
+	// will produce the same result, so do not spill it to webhook_events.
+	if _, ok := models.JobStatusPriority(event.WorkflowJob.Status); !ok {
+		logger.Logger.Warn("Unknown workflow_job action; refusing to upsert",
+			zap.String("action", event.Action),
+			zap.Int64("job_id", event.WorkflowJob.ID),
+			zap.String("delivery_id", sequence.DeliveryID))
+		return nil
+	}
+
 	// Get the previous state of this job from database to handle transitions correctly
 	previousJob, err := h.db.GetWorkflowJobByID(context.TODO(), event.WorkflowJob.ID)
 	if err != nil {
 		logger.Logger.Error("Error getting previous job state",
 			zap.Error(err),
 			zap.Int64("job_id", event.WorkflowJob.ID))
-		// Continue processing even if we can't get previous state
+		// Non-fatal: previousJob falls back to its zero value, so the
+		// transition log line below will read previous_status as empty.
 	}
 
-	// Store job data in database with atomicity checks
+	// Store job data in database with atomicity checks. AddOrUpdateJob applies
+	// the lifecycle/terminal transition rules; a real error here means the
+	// write itself failed and the caller should retry / spill, so we must NOT
+	// swallow it.
 	updated, err := h.db.AddOrUpdateJob(context.TODO(), event.WorkflowJob, sequence.Timestamp)
 	if err != nil {
 		logger.Logger.Error("Error saving job to database",
 			zap.Error(err),
 			zap.String("delivery_id", sequence.DeliveryID),
 			zap.Int64("job_id", event.WorkflowJob.ID))
-		// Continue processing even if database save fails
+		return fmt.Errorf("failed to save workflow job: %w", err)
 	}
 
 	// If the job was not updated due to atomicity constraints, skip further processing
@@ -88,32 +104,8 @@ func (h *WorkflowJobHandler) HandleEvent(eventData []byte, sequence *models.Even
 	// Handle state transitions correctly
 	h.handleJobStatusTransition(previousJob.Status, event.WorkflowJob.Status, event.WorkflowJob)
 
-	h.sendMetricsUpdate()
-
 	logger.Logger.Debug("Event handled successfully", zap.String("event_type", h.GetEventType()))
 	return nil
-}
-
-func (h *WorkflowJobHandler) sendMetricsUpdate() {
-	// Query database for current job counts
-	running, queued, err := h.db.GetCurrentJobCounts(context.TODO())
-	if err != nil {
-		logger.Logger.Error("Failed to query current job counts", zap.Error(err))
-		return
-	}
-
-	// Convert to the expected format for SSE
-	metricsUpdate := models.MetricsUpdateEvent{
-		RunningJobs: running,
-		QueuedJobs:  queued,
-		Timestamp:   time.Now().Format(time.RFC3339),
-	}
-
-	logger.Logger.Debug("Sending metrics update",
-		zap.Int("running_jobs", metricsUpdate.RunningJobs),
-		zap.Int("queued_jobs", metricsUpdate.QueuedJobs))
-
-	SendMetricsUpdate(metricsUpdate)
 }
 
 // handleJobStatusTransition manages state transitions correctly between job statuses
@@ -177,19 +169,13 @@ func (h *WorkflowJobHandler) GetStatusPriority(eventData []byte) (int, error) {
 		return 0, fmt.Errorf("failed to parse workflow_job JSON payload: %w", err)
 	}
 
-	switch models.JobStatus(event.Action) {
-	case models.JobStatusWaiting:
-		return 1, nil
-	case models.JobStatusQueued:
-		return 2, nil
-	case models.JobStatusRequested:
-		return 3, nil
-	case models.JobStatusInProgress:
-		return 4, nil
-	case models.JobStatusCompleted, models.JobStatusCancelled:
-		return 5, nil
-	default:
+	prio, ok := models.JobStatusPriority(models.JobStatus(event.Action))
+	if !ok {
 		logger.Logger.Warn("Unknown job status", zap.String("status", event.Action))
-		return 999, nil
+		// Return 0 (lowest priority) — combined with the AddOrUpdateJob guard
+		// this means an unknown action sorts to the start of an ordering
+		// batch and is then rejected by the typed-table upsert.
+		return 0, nil
 	}
+	return prio, nil
 }

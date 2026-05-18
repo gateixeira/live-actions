@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -51,7 +52,7 @@ func TestNewEventOrderingService(t *testing.T) {
 	assert.NotNil(t, service.processFunc)
 	assert.Equal(t, 5*time.Second, service.flushInterval)
 	assert.Equal(t, 10*time.Second, service.maxAge)
-	assert.Equal(t, 100, service.batchSize)
+	assert.Equal(t, 500, service.batchSize)
 	assert.NotNil(t, service.ctx)
 	assert.NotNil(t, service.cancel)
 }
@@ -60,50 +61,153 @@ func TestEventOrderingService_AddEvent(t *testing.T) {
 	setupTestLoggerForEventOrdering()
 	defer logger.SyncLogger()
 
-	tests := []struct {
-		name          string
-		event         *models.OrderedEvent
-		mockSetup     func(*database.MockDatabase)
-		expectedError bool
-	}{
-		{
-			name:  "successful event storage",
-			event: createTestEvent("delivery-1", "workflow_job", "job-123", 1),
-			mockSetup: func(m *database.MockDatabase) {
-				m.On("StoreWebhookEvent", mock.Anything, mock.AnythingOfType("*models.OrderedEvent")).Return(nil)
-			},
-			expectedError: false,
-		},
-		{
-			name:  "database error",
-			event: createTestEvent("delivery-2", "workflow_job", "job-456", 2),
-			mockSetup: func(m *database.MockDatabase) {
-				m.On("StoreWebhookEvent", mock.Anything, mock.AnythingOfType("*models.OrderedEvent")).Return(errors.New("database error"))
-			},
-			expectedError: true,
-		},
-	}
+	t.Run("enqueues event onto ingest channel without DB write", func(t *testing.T) {
+		mockDB := new(database.MockDatabase)
+		// AddEvent is now a channel send; it must NOT touch the DB synchronously.
+		// We deliberately do not wire StoreWebhookEvents here so that any
+		// synchronous DB call would fail the test.
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockDB := new(database.MockDatabase)
-			tt.mockSetup(mockDB)
-
-			service := NewEventOrderingService(mockDB, func(event *models.OrderedEvent) error {
-				return nil
-			})
-
-			err := service.AddEvent(tt.event)
-
-			if tt.expectedError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-
-			mockDB.AssertExpectations(t)
+		service := NewEventOrderingService(mockDB, func(event *models.OrderedEvent) error {
+			return nil
 		})
+
+		err := service.AddEvent(createTestEvent("delivery-1", "workflow_job", "job-123", 1))
+		assert.NoError(t, err)
+
+		// Event should be sitting in the channel waiting for the ingest worker.
+		assert.Equal(t, 1, len(service.ingestCh))
+		mockDB.AssertNotCalled(t, "StoreWebhookEvent", mock.Anything, mock.Anything)
+		mockDB.AssertNotCalled(t, "StoreWebhookEvents", mock.Anything, mock.Anything)
+	})
+
+	t.Run("returns ErrIngestQueueFull when channel saturated", func(t *testing.T) {
+		mockDB := new(database.MockDatabase)
+		service := NewEventOrderingService(mockDB, func(event *models.OrderedEvent) error {
+			return nil
+		})
+		// Shrink channel + timeout to make the saturation path observable in tests.
+		service.ingestCh = make(chan *models.OrderedEvent, 1)
+		service.enqueueTimeout = 20 * time.Millisecond
+
+		// Fill the channel.
+		assert.NoError(t, service.AddEvent(createTestEvent("d-1", "workflow_job", "k", 1)))
+
+		// Next AddEvent must time out and surface ErrIngestQueueFull.
+		err := service.AddEvent(createTestEvent("d-2", "workflow_job", "k", 1))
+		assert.ErrorIs(t, err, ErrIngestQueueFull)
+	})
+
+	t.Run("returns context error when service stopped", func(t *testing.T) {
+		mockDB := new(database.MockDatabase)
+		service := NewEventOrderingService(mockDB, func(event *models.OrderedEvent) error {
+			return nil
+		})
+		service.ingestCh = make(chan *models.OrderedEvent, 1)
+		service.enqueueTimeout = time.Second
+
+		// Fill, then cancel the service so the second send observes ctx.Done().
+		assert.NoError(t, service.AddEvent(createTestEvent("d-1", "workflow_job", "k", 1)))
+		service.cancel()
+
+		err := service.AddEvent(createTestEvent("d-2", "workflow_job", "k", 1))
+		assert.ErrorIs(t, err, context.Canceled)
+	})
+}
+
+// TestEventOrderingService_IngestWorker_HappyPathSkipsSpill asserts that on
+// the happy path (processFunc returns nil) the ingest worker does NOT write
+// to webhook_events at all — events are processed directly off the
+// in-memory channel.
+func TestEventOrderingService_IngestWorker_HappyPathSkipsSpill(t *testing.T) {
+	setupTestLoggerForEventOrdering()
+	defer logger.SyncLogger()
+
+	mockDB := new(database.MockDatabase)
+	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.Anything, mock.Anything).Return([]*models.OrderedEvent{}, nil).Maybe()
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
+
+	var processed int32
+	var processedMu sync.Mutex
+	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error {
+		processedMu.Lock()
+		processed++
+		processedMu.Unlock()
+		return nil
+	})
+	service.ingestBatchWait = 10 * time.Millisecond
+	service.flushInterval = time.Hour
+	service.Start()
+
+	for i := 0; i < 5; i++ {
+		assert.NoError(t, service.AddEvent(createTestEvent(
+			"d-"+string(rune('0'+i)), "workflow_job", "k", 1)))
 	}
+
+	time.Sleep(80 * time.Millisecond)
+	service.Stop()
+
+	processedMu.Lock()
+	assert.Equal(t, int32(5), processed, "all events should reach processFunc")
+	processedMu.Unlock()
+	mockDB.AssertNotCalled(t, "StoreWebhookEvents", mock.Anything, mock.Anything)
+	mockDB.AssertNotCalled(t, "StoreWebhookEvent", mock.Anything, mock.Anything)
+}
+
+// TestEventOrderingService_IngestWorker_TransientFailureSpills asserts that
+// when processFunc returns a non-permanent error the event is spilled to
+// webhook_events so the cold-path flush worker can retry it.
+func TestEventOrderingService_IngestWorker_TransientFailureSpills(t *testing.T) {
+	setupTestLoggerForEventOrdering()
+	defer logger.SyncLogger()
+
+	mockDB := new(database.MockDatabase)
+	mockDB.On("StoreWebhookEvents", mock.Anything, mock.MatchedBy(func(events []*models.OrderedEvent) bool {
+		return len(events) >= 1
+	})).Return(nil).Maybe()
+	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.Anything, mock.Anything).Return([]*models.OrderedEvent{}, nil).Maybe()
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
+
+	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error {
+		return errors.New("simulated transient db failure")
+	})
+	service.ingestBatchWait = 10 * time.Millisecond
+	service.flushInterval = time.Hour
+	service.Start()
+
+	for i := 0; i < 3; i++ {
+		assert.NoError(t, service.AddEvent(createTestEvent(
+			"d-"+string(rune('0'+i)), "workflow_job", "k", 1)))
+	}
+
+	time.Sleep(80 * time.Millisecond)
+	service.Stop()
+
+	mockDB.AssertCalled(t, "StoreWebhookEvents", mock.Anything, mock.Anything)
+}
+
+// TestEventOrderingService_IngestWorker_PermanentFailureDropped asserts that
+// permanent failures are NOT spilled (retrying them would just fail again).
+func TestEventOrderingService_IngestWorker_PermanentFailureDropped(t *testing.T) {
+	setupTestLoggerForEventOrdering()
+	defer logger.SyncLogger()
+
+	mockDB := new(database.MockDatabase)
+	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.Anything, mock.Anything).Return([]*models.OrderedEvent{}, nil).Maybe()
+	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
+
+	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error {
+		return ErrPermanent
+	})
+	service.ingestBatchWait = 10 * time.Millisecond
+	service.flushInterval = time.Hour
+	service.Start()
+
+	assert.NoError(t, service.AddEvent(createTestEvent("d-1", "workflow_job", "k", 1)))
+
+	time.Sleep(80 * time.Millisecond)
+	service.Stop()
+
+	mockDB.AssertNotCalled(t, "StoreWebhookEvents", mock.Anything, mock.Anything)
 }
 
 func TestEventOrderingService_StartStop(t *testing.T) {
@@ -161,7 +265,7 @@ func TestEventOrderingService_flushReadyEvents(t *testing.T) {
 		{
 			name: "no pending events",
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 100).Return([]*models.OrderedEvent{}, nil)
+				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).Return([]*models.OrderedEvent{}, nil)
 			},
 			expectedLogs: 0,
 		},
@@ -172,14 +276,14 @@ func TestEventOrderingService_flushReadyEvents(t *testing.T) {
 					createTestEvent("delivery-1", "workflow_job", "job-123", 1),
 					createTestEvent("delivery-2", "workflow_job", "job-456", 2),
 				}
-				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 100).Return(events, nil)
+				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).Return(events, nil)
 			},
 			expectedLogs: 2,
 		},
 		{
 			name: "database error",
 			mockSetup: func(m *database.MockDatabase) {
-				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 100).Return([]*models.OrderedEvent{}, errors.New("db error"))
+				m.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).Return([]*models.OrderedEvent{}, errors.New("db error"))
 			},
 			expectedLogs: 0,
 		},
@@ -214,6 +318,76 @@ func TestEventOrderingService_flushReadyEvents(t *testing.T) {
 			mockDB.AssertExpectations(t)
 		})
 	}
+}
+
+func TestEventOrderingService_flushReadyEvents_drainsBacklogAcrossIterations(t *testing.T) {
+	setupTestLoggerForEventOrdering()
+	defer logger.SyncLogger()
+
+	mockDB := new(database.MockDatabase)
+
+	// First two calls return a full batch (forcing the drain loop to keep
+	// going); the third returns a partial batch which terminates the loop.
+	full := func() []*models.OrderedEvent {
+		events := make([]*models.OrderedEvent, 500)
+		for i := 0; i < 500; i++ {
+			events[i] = createTestEvent("d-"+itoa(i), "workflow_job", "k", i)
+		}
+		return events
+	}
+	partial := []*models.OrderedEvent{
+		createTestEvent("d-tail-1", "workflow_job", "k", 0),
+		createTestEvent("d-tail-2", "workflow_job", "k", 1),
+	}
+
+	mockDB.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).
+		Return(full(), nil).Once()
+	mockDB.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).
+		Return(full(), nil).Once()
+	mockDB.On("GetPendingEventsByAge", mock.Anything, 10*time.Second, 500).
+		Return(partial, nil).Once()
+
+	var processed int
+	var mu sync.Mutex
+	service := NewEventOrderingService(mockDB, func(*models.OrderedEvent) error {
+		mu.Lock()
+		processed++
+		mu.Unlock()
+		return nil
+	})
+
+	service.flushReadyEvents()
+
+	mu.Lock()
+	got := processed
+	mu.Unlock()
+
+	assert.Equal(t, 500+500+2, got, "drain loop should pull batches until DB returns < batchSize")
+	mockDB.AssertExpectations(t)
+}
+
+// itoa is a tiny helper so the test file does not need strconv just for this.
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	neg := false
+	if i < 0 {
+		neg = true
+		i = -i
+	}
+	var buf [20]byte
+	pos := len(buf)
+	for i > 0 {
+		pos--
+		buf[pos] = byte('0' + i%10)
+		i /= 10
+	}
+	if neg {
+		pos--
+		buf[pos] = '-'
+	}
+	return string(buf[pos:])
 }
 
 func TestEventOrderingService_flushAll(t *testing.T) {
@@ -403,7 +577,7 @@ func TestEventOrderingService_ConcurrentAccess(t *testing.T) {
 	mockDB := new(database.MockDatabase)
 
 	// Allow multiple calls to database methods
-	mockDB.On("StoreWebhookEvent", mock.Anything, mock.AnythingOfType("*models.OrderedEvent")).Return(nil).Maybe()
+	mockDB.On("StoreWebhookEvents", mock.Anything, mock.AnythingOfType("[]*models.OrderedEvent")).Return(nil).Maybe()
 	mockDB.On("GetPendingEventsByAge", mock.Anything, mock.AnythingOfType("time.Duration"), mock.AnythingOfType("int")).Return([]*models.OrderedEvent{}, nil).Maybe()
 	mockDB.On("GetPendingEventsGrouped", mock.Anything, 1000).Return([]*models.OrderedEvent{}, nil).Maybe()
 
@@ -500,7 +674,7 @@ func TestEventOrderingService_CustomConfiguration(t *testing.T) {
 	// Verify default values
 	assert.Equal(t, 5*time.Second, originalFlushInterval)
 	assert.Equal(t, 10*time.Second, originalMaxAge)
-	assert.Equal(t, 100, originalBatchSize)
+	assert.Equal(t, 500, originalBatchSize)
 
 	// Modify configuration
 	service.flushInterval = 2 * time.Second
