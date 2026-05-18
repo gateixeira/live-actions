@@ -2,8 +2,6 @@
 [![Go](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
 [![Docker](https://img.shields.io/badge/Docker-Container-blue?logo=docker)](https://www.docker.com/)
 
-[![Beta](https://img.shields.io/badge/Status-Beta-yellow?style=for-the-badge)](https://github.com/gateixeira/live-actions/issues)
-
 # Live Actions - GitHub Actions Monitoring 🚀
 
 > ⚠️ **Beta Software Notice**: Live Actions is currently in beta. While functional and actively developed, expect potential instabilities. Please report issues and provide feedback to help us improve!
