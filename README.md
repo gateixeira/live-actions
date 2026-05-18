@@ -106,7 +106,7 @@ The UI updates in real time via Server-Sent Events — no manual refresh needed.
 | `GITHUB_ORG` | | Org login to subscribe to. Mutually exclusive with `GITHUB_REPO` and `GITHUB_ENTERPRISE`. |
 | `GITHUB_ENTERPRISE` | | Enterprise slug to subscribe to. Mutually exclusive with `GITHUB_REPO` and `GITHUB_ORG`. See enterprise caveat below. |
 | `GITHUB_EVENTS` | `workflow_run,workflow_job` | Comma-separated event types for the WebSocket subscription (use `*` for all). |
-| `GITHUB_HOST` | `github.com` | GitHub host (set to your GHES hostname when applicable). |
+| `GITHUB_HOST` | `github.com` | GitHub host. Use your `<customer>.ghe.com` subdomain for Enterprise Cloud with data residency, or your GHES hostname for GitHub Enterprise Server. |
 
 ## GitHub Webhook Configuration
 

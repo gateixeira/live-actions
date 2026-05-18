@@ -115,12 +115,21 @@ func (s *Subscriber) apiBase() string {
 	return s.cfg.apiBase()
 }
 
-// apiBase returns the REST API base for the configured host.
+// apiBase returns the REST API base for the configured host. Three shapes
+// are supported:
+//
+//   - github.com           → https://api.github.com           (public GitHub)
+//   - <customer>.ghe.com   → https://api.<customer>.ghe.com   (Enterprise Cloud with data residency)
+//   - everything else      → https://<host>/api/v3            (GitHub Enterprise Server)
 func (c *Config) apiBase() string {
-	if c.Host == "github.com" {
+	switch {
+	case c.Host == "github.com":
 		return "https://api.github.com"
+	case strings.HasSuffix(c.Host, ".ghe.com"):
+		return "https://api." + c.Host
+	default:
+		return "https://" + c.Host + "/api/v3"
 	}
-	return "https://" + c.Host + "/api/v3"
 }
 
 // Subscriber owns the lifecycle of one relay subscription.

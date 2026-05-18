@@ -222,7 +222,31 @@ func TestSubscriber_CreateHookMissingWsURL(t *testing.T) {
 	}
 }
 
+// TestConfig_apiBase covers the three GitHub deployment shapes the
+// subscriber needs to talk to: public github.com, GHE.com data residency
+// subdomains, and GHES instances on arbitrary hostnames.
+func TestConfig_apiBase(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		host string
+		want string
+	}{
+		{"github.com", "https://api.github.com"},
+		{"octocorp.ghe.com", "https://api.octocorp.ghe.com"},
+		{"another-tenant.ghe.com", "https://api.another-tenant.ghe.com"},
+		{"ghes.example.com", "https://ghes.example.com/api/v3"},
+	}
+	for _, tc := range cases {
+		c := Config{Host: tc.host}
+		if got := c.apiBase(); got != tc.want {
+			t.Errorf("apiBase(%q) = %q, want %q", tc.host, got, tc.want)
+		}
+	}
+}
+
 // hookHostHolder lets the create-hook handler embed the test server's host
+
 // in its ws_url response without a package-level race.
 type hostHolder struct {
 	mu   sync.Mutex
