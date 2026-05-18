@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/gateixeira/live-actions/pkg/logger"
-	_ "modernc.org/sqlite"
 	"go.uber.org/zap"
+	_ "modernc.org/sqlite"
 )
 
 //go:embed migrations/*.up.sql

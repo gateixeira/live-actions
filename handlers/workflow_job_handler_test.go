@@ -90,7 +90,6 @@ func TestWorkflowJobHandler_HandleEvent_Success(t *testing.T) {
 			job.RunID == 67890
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
-
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
 
@@ -153,7 +152,6 @@ func TestWorkflowJobHandler_HandleEvent_DatabaseGetJobError(t *testing.T) {
 		return job.ID == 12345 &&
 			job.Status == models.JobStatus("queued")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
-
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -282,7 +280,6 @@ func TestWorkflowJobHandler_HandleEvent_DifferentActions(t *testing.T) {
 					job.Status == tc.expectedStatus
 			}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
-
 			// Execute the handler
 			err = handler.HandleEvent(eventData, sequence)
 
@@ -366,7 +363,6 @@ func TestWorkflowJobHandler_HandleEvent_StatusTransitions(t *testing.T) {
 					job.Status == tc.expectedStatus
 			}), mock.AnythingOfType("time.Time")).Return(true, nil)
 
-
 			// Execute the handler
 			err = handler.HandleEvent(eventData, sequence)
 
@@ -421,7 +417,6 @@ func TestWorkflowJobHandler_HandleEvent_WithStartedAtTime(t *testing.T) {
 		return job.ID == 12345 &&
 			job.Status == models.JobStatus("in_progress")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
-
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)
@@ -485,7 +480,6 @@ func TestWorkflowJobHandler_HandleEvent_MinimalRequiredFields(t *testing.T) {
 		return job.ID == 1 &&
 			job.Status == models.JobStatus("queued")
 	}), mock.AnythingOfType("time.Time")).Return(true, nil)
-
 
 	// Execute the handler
 	err = handler.HandleEvent(eventData, sequence)

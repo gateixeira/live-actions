@@ -62,12 +62,12 @@ type EventOrderingService struct {
 	batchSize     int
 
 	// ingest worker (buffers AddEvent calls and batch-INSERTs them)
-	ingestCh         chan *models.OrderedEvent
-	ingestBatchSize  int
-	ingestBatchWait  time.Duration
-	enqueueTimeout   time.Duration
-	ingestDrainWait  time.Duration
-	ingestDoneCh     chan struct{}
+	ingestCh        chan *models.OrderedEvent
+	ingestBatchSize int
+	ingestBatchWait time.Duration
+	enqueueTimeout  time.Duration
+	ingestDrainWait time.Duration
+	ingestDoneCh    chan struct{}
 
 	mutex  sync.Mutex
 	wg     sync.WaitGroup
@@ -78,19 +78,19 @@ type EventOrderingService struct {
 func NewEventOrderingService(db database.DatabaseInterface, processFunc func(*models.OrderedEvent) error) *EventOrderingService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &EventOrderingService{
-		db:               db,
-		processFunc:      processFunc,
-		flushInterval:    5 * time.Second,
-		maxAge:           10 * time.Second,
-		batchSize:        500,
-		ingestCh:         make(chan *models.OrderedEvent, defaultIngestChannelSize),
-		ingestBatchSize:  defaultIngestBatchSize,
-		ingestBatchWait:  defaultIngestBatchWait,
-		enqueueTimeout:   defaultEnqueueTimeout,
-		ingestDrainWait:  5 * time.Second,
-		ingestDoneCh:     make(chan struct{}),
-		ctx:              ctx,
-		cancel:           cancel,
+		db:              db,
+		processFunc:     processFunc,
+		flushInterval:   5 * time.Second,
+		maxAge:          10 * time.Second,
+		batchSize:       500,
+		ingestCh:        make(chan *models.OrderedEvent, defaultIngestChannelSize),
+		ingestBatchSize: defaultIngestBatchSize,
+		ingestBatchWait: defaultIngestBatchWait,
+		enqueueTimeout:  defaultEnqueueTimeout,
+		ingestDrainWait: 5 * time.Second,
+		ingestDoneCh:    make(chan struct{}),
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 }
 

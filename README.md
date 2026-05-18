@@ -2,8 +2,6 @@
 [![Go](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
 [![Docker](https://img.shields.io/badge/Docker-Container-blue?logo=docker)](https://www.docker.com/)
 
-[![Beta](https://img.shields.io/badge/Status-Beta-yellow?style=for-the-badge)](https://github.com/gateixeira/live-actions/issues)
-
 # Live Actions - GitHub Actions Monitoring 🚀
 
 > ⚠️ **Beta Software Notice**: Live Actions is currently in beta. While functional and actively developed, expect potential instabilities. Please report issues and provide feedback to help us improve!
@@ -100,6 +98,13 @@ The UI updates in real time via Server-Sent Events — no manual refresh needed.
 | `TLS_ENABLED` | `false` | Enable HTTPS cookie flags |
 | `DATA_RETENTION_DAYS` | `30` | How long to keep historical data |
 | `CLEANUP_INTERVAL_HOURS` | `24` | How often to run data cleanup |
+| `WEBHOOK_TRANSPORT` | `http` | How webhooks reach the app: `http` (public endpoint) or `websocket` (relay, no public endpoint needed) |
+| `GITHUB_TOKEN` | *(required for `websocket`)* | Token with `admin:repo_hook` (per-repo) or `admin:org_hook` (per-org) scope. `gh auth token` works. |
+| `GITHUB_REPO` | | `owner/repo` to subscribe to. Mutually exclusive with `GITHUB_ORG` and `GITHUB_ENTERPRISE`. |
+| `GITHUB_ORG` | | Org login to subscribe to. Mutually exclusive with `GITHUB_REPO` and `GITHUB_ENTERPRISE`. |
+| `GITHUB_ENTERPRISE` | | Enterprise slug to subscribe to. Mutually exclusive with `GITHUB_REPO` and `GITHUB_ORG`. See enterprise caveat below. |
+| `GITHUB_EVENTS` | `workflow_run,workflow_job` | Comma-separated event types for the WebSocket subscription (use `*` for all). |
+| `GITHUB_HOST` | `github.com` | GitHub host. Use your `<customer>.ghe.com` subdomain for Enterprise Cloud with data residency, or your GHES hostname for GitHub Enterprise Server. |
 
 ## GitHub Webhook Configuration
 
@@ -132,6 +137,69 @@ ngrok http 8080
 ```
 
 Update your GitHub webhook URL to the ngrok HTTPS URL (e.g., `https://a1b2c3d4.ngrok.io/webhook`).
+
+### WebSocket transport (no public endpoint)
+
+If the app runs somewhere GitHub can't reach (behind NAT, on a laptop, in a
+private VPC), set `WEBHOOK_TRANSPORT=websocket` and the app will subscribe
+to GitHub's relay over an outbound WebSocket connection. This mirrors the
+approach used by the [`gh webhook`](https://github.com/cli/gh-webhook) CLI:
+on startup a temporary webhook is created on the target repo or org with
+`active=false`, the relay is dialed over `wss://`, the hook is activated,
+and deliveries arrive as JSON frames on the open connection. The HTTP
+endpoint is not registered when this mode is enabled by the operator on the
+GitHub side, but the app keeps `POST /webhook` available either way so you
+can still send manual replays from `curl`.
+
+**Quick start (per-repo):**
+
+```bash
+export WEBHOOK_TRANSPORT=websocket
+export GITHUB_TOKEN=$(gh auth token)   # needs admin:repo_hook scope
+export GITHUB_REPO=owner/repo
+export GITHUB_EVENTS=workflow_run,workflow_job
+make run
+```
+
+**Per-org:**
+
+```bash
+export WEBHOOK_TRANSPORT=websocket
+export GITHUB_TOKEN=$(gh auth token)   # needs admin:org_hook scope
+export GITHUB_ORG=my-org
+make run
+```
+
+**Per-enterprise:**
+
+```bash
+export WEBHOOK_TRANSPORT=websocket
+export GITHUB_TOKEN=$(gh auth token)   # needs manage_webhooks (or site_admin) scope
+export GITHUB_ENTERPRISE=my-enterprise
+make run
+```
+
+> **Note on enterprise mode:** the upstream `gh webhook` CLI only supports
+> repo and org hooks; enterprise support here uses the same protocol against
+> `POST /enterprises/{slug}/hooks` but the relay (`webhook.gh.io`) is not
+> known to be exercised at the enterprise level. It may or may not return a
+> usable `ws_url` depending on whether your account has the feature enabled
+> at that scope. Test in a non-critical environment first.
+
+**Caveats:**
+
+- The relay endpoint (`webhook.gh.io`) is GitHub-managed and undocumented;
+  the protocol can change without notice.
+- Each subscription is single-subscriber: only one process at a time can
+  consume a given hook's WebSocket stream.
+- Per-frame HMAC verification is skipped because the relay itself is
+  authenticated by `GITHUB_TOKEN` at connection time.
+- The temporary hook is best-effort deleted on graceful shutdown. A hard
+  kill (`SIGKILL`, OOM) will leak the hook in the repo or org settings;
+  delete it manually under *Settings → Webhooks* if that happens.
+- Deliveries arriving over WebSocket are not visible in GitHub's "Recent
+  Deliveries" UI as redeliverable, since the hook stays inactive between
+  reconnects.
 
 ## API Endpoints
 
