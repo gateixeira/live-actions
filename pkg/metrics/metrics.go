@@ -22,7 +22,7 @@ type Registry struct {
 	JobConclusionsTotal *prometheus.CounterVec
 
 	// Webhook ingest counters: outcome ∈ {accepted, rejected_queue_full,
-	// rejected_invalid, ignored}.
+	// rejected_invalid, ignored, spilled, spill_failed, permanent_failure}.
 	WebhookEventsTotal *prometheus.CounterVec
 
 	// Ingest queue capacity is set once at startup; depth is supplied by the
