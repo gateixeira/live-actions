@@ -95,7 +95,7 @@ export function FailureAnalytics({ ready, repo }: Props) {
           </div>
         </div>
 
-        <div className="h-[320px]">
+        <div className="h-[240px] sm:h-[320px]">
           {trendData.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <span className="text-sm text-gray-600">No data available for this period</span>
@@ -111,6 +111,8 @@ export function FailureAnalytics({ ready, repo }: Props) {
                   tick={{ fill: '#6b7280' }}
                   axisLine={{ stroke: '#374151' }}
                   tickLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={40}
                 />
                 <YAxis
                   allowDecimals={false}
