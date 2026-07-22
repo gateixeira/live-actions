@@ -209,7 +209,7 @@ export function WorkflowTable({ ready, refreshSignal, repo, status }: { ready: b
             <button
               disabled={page <= 1}
               onClick={() => setPage((p) => p - 1)}
-              className="rounded-md px-2.5 py-1 text-xs text-gray-400 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="rounded-md px-3 py-2 text-xs text-gray-400 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Previous
             </button>
@@ -219,7 +219,7 @@ export function WorkflowTable({ ready, refreshSignal, repo, status }: { ready: b
             <button
               disabled={page >= totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="rounded-md px-2.5 py-1 text-xs text-gray-400 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="rounded-md px-3 py-2 text-xs text-gray-400 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Next
             </button>
