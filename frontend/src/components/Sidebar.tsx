@@ -12,6 +12,10 @@ interface SidebarProps {
   activePage: Page
   onNavigate: (page: Page) => void
   connected: boolean
+  /** Whether the mobile drawer is open. Ignored at >=md where the sidebar is static. */
+  open: boolean
+  /** Called to dismiss the mobile drawer (backdrop tap or navigation). */
+  onClose: () => void
 }
 
 const NAV_ITEMS: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
@@ -20,9 +24,23 @@ const NAV_ITEMS: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'labels', label: 'Runner Labels', icon: Tags },
 ]
 
-export function Sidebar({ activePage, onNavigate, connected }: SidebarProps) {
+export function Sidebar({ activePage, onNavigate, connected, open, onClose }: SidebarProps) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 flex w-56 flex-col border-r border-gray-800 bg-gray-900">
+    <>
+      {/* Mobile backdrop — only rendered while the drawer is open below md */}
+      {open && (
+        <div
+          className="fixed inset-0 z-20 bg-black/60 md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={clsx(
+          'fixed inset-y-0 left-0 z-30 flex w-56 flex-col border-r border-gray-800 bg-gray-900 transition-transform duration-200 md:translate-x-0',
+          open ? 'translate-x-0' : '-translate-x-full',
+        )}
+      >
       {/* Logo */}
       <div className="flex h-14 items-center gap-2.5 border-b border-gray-800 px-5">
         <Zap className="h-5 w-5 text-indigo-400" />
@@ -36,7 +54,7 @@ export function Sidebar({ activePage, onNavigate, connected }: SidebarProps) {
         {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
-            onClick={() => onNavigate(id)}
+            onClick={() => { onNavigate(id); onClose() }}
             className={clsx(
               'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
               activePage === id
@@ -65,5 +83,6 @@ export function Sidebar({ activePage, onNavigate, connected }: SidebarProps) {
         </div>
       </div>
     </aside>
+    </>
   )
 }
