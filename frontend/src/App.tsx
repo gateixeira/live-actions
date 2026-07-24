@@ -195,7 +195,7 @@ export default function App() {
         </header>
 
         {/* Page content */}
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           {activePage === 'dashboard' && (
             <div className="space-y-6">
               <MetricsCards
