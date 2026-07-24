@@ -188,7 +188,8 @@ export function LabelDemand({ ready, repo }: Props) {
       <div>
         <h3 className="mb-3 text-sm font-semibold text-gray-200">Label Summary</h3>
         <div className="overflow-hidden rounded-xl border border-gray-800 bg-gray-900">
-          <table className="w-full text-left">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px] text-left">
             <thead>
               <tr className="border-b border-gray-800 bg-gray-800/40 text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <th className="py-3 px-4">Label</th>
@@ -238,6 +239,7 @@ export function LabelDemand({ ready, repo }: Props) {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>
