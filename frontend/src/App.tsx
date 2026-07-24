@@ -132,7 +132,7 @@ export default function App() {
       />
 
       {/* Main content */}
-      <main className="flex-1 min-h-screen md:ml-56">
+      <main className="min-w-0 flex-1 min-h-screen md:ml-56">
         {/* Page header */}
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-800 bg-gray-950/80 px-6 backdrop-blur-sm">
           <div className="flex items-center gap-3">
