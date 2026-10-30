@@ -56,7 +56,7 @@ export function Sidebar({ activePage, onNavigate, connected, open, onClose }: Si
             key={id}
             onClick={() => { onNavigate(id); onClose() }}
             className={clsx(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
               activePage === id
                 ? 'bg-indigo-500/10 text-indigo-400'
                 : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200',

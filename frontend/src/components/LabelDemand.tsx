@@ -98,7 +98,7 @@ export function LabelDemand({ ready, repo }: Props) {
                   load(p.value)
                 }}
                 className={clsx(
-                  'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                  'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                   period === p.value
                     ? 'bg-gray-700 text-white'
                     : 'text-gray-400 hover:text-gray-200',
