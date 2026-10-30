@@ -40,6 +40,8 @@ export default function App() {
   const [selectedRepo, setSelectedRepo] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
   const [repos, setRepos] = useState<string[]>([])
+  const [repoLoadState, setRepoLoadState] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [repoLoadAttempt, setRepoLoadAttempt] = useState(0)
   const [repoSearchOpen, setRepoSearchOpen] = useState(false)
   const [repoSearch, setRepoSearch] = useState('')
 
@@ -76,10 +78,20 @@ export default function App() {
 
   useEffect(() => {
     if (!ready) return
+    let cancelled = false
     getRepositories()
-      .then((r) => setRepos(r.repositories))
-      .catch((err) => console.error('Failed to load repositories', err))
-  }, [ready])
+      .then((r) => {
+        if (cancelled) return
+        setRepos(r.repositories)
+        setRepoLoadState('loaded')
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('Failed to load repositories', err)
+        setRepoLoadState('error')
+      })
+    return () => { cancelled = true }
+  }, [ready, repoLoadAttempt])
 
   const loadMetrics = useCallback(
     (p: Period) => {
@@ -151,6 +163,7 @@ export default function App() {
                       <input
                         type="text"
                         autoFocus
+                        aria-label="Search repositories"
                         placeholder="Search repositories..."
                         value={repoSearch}
                         onChange={(e) => setRepoSearch(e.target.value)}
@@ -173,6 +186,43 @@ export default function App() {
                           {r}
                         </button>
                       ))}
+                      {repoLoadState === 'loading' && (
+                        <p role="status" className="px-3 py-2 text-xs text-gray-400">
+                          Loading repositories…
+                        </p>
+                      )}
+                      {repoLoadState === 'error' && (
+                        <div role="alert" className="px-3 py-2 text-xs text-gray-300">
+                          <p>Could not load repositories.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRepoLoadState('loading')
+                              setRepoLoadAttempt((attempt) => attempt + 1)
+                            }}
+                            className="mt-2 rounded px-2 py-1 text-indigo-300 hover:bg-gray-700"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      )}
+                      {repoLoadState === 'loaded' && repos.length === 0 && (
+                        <p role="status" className="px-3 py-2 text-xs text-gray-400">
+                          No repositories available.
+                        </p>
+                      )}
+                      {repoLoadState === 'loaded' && repos.length > 0 && filteredRepos.length === 0 && (
+                        <div role="status" className="px-3 py-2 text-xs text-gray-400">
+                          <p>No repositories match “{repoSearch}”.</p>
+                          <button
+                            type="button"
+                            onClick={() => setRepoSearch('')}
+                            className="mt-2 rounded px-2 py-1 text-indigo-300 hover:bg-gray-700"
+                          >
+                            Clear search
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </>
