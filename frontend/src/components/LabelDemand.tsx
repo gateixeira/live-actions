@@ -98,7 +98,7 @@ export function LabelDemand({ ready, repo }: Props) {
                   load(p.value)
                 }}
                 className={clsx(
-                  'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                  'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                   period === p.value
                     ? 'bg-gray-700 text-white'
                     : 'text-gray-400 hover:text-gray-200',
@@ -110,7 +110,7 @@ export function LabelDemand({ ready, repo }: Props) {
           </div>
         </div>
 
-        <div className="h-[320px]">
+        <div className="h-[240px] sm:h-[320px]">
           {trendData.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <span className="text-sm text-gray-600">No data available for this period</span>
@@ -134,6 +134,8 @@ export function LabelDemand({ ready, repo }: Props) {
                   tick={{ fill: '#6b7280' }}
                   axisLine={{ stroke: '#374151' }}
                   tickLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={40}
                 />
                 <YAxis
                   allowDecimals={false}
@@ -188,7 +190,8 @@ export function LabelDemand({ ready, repo }: Props) {
       <div>
         <h3 className="mb-3 text-sm font-semibold text-gray-200">Label Summary</h3>
         <div className="overflow-hidden rounded-xl border border-gray-800 bg-gray-900">
-          <table className="w-full text-left">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px] text-left">
             <thead>
               <tr className="border-b border-gray-800 bg-gray-800/40 text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <th className="py-3 px-4">Label</th>
@@ -238,6 +241,7 @@ export function LabelDemand({ ready, repo }: Props) {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>

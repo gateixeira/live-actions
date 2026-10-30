@@ -142,3 +142,61 @@ func TestGetEnvOrDefault(t *testing.T) {
 		})
 	}
 }
+
+func TestNewConfigGitHubRepos(t *testing.T) {
+	setWebSocketConfigEnv := func(t *testing.T) {
+		t.Helper()
+		t.Setenv("ENVIRONMENT", "development")
+		t.Setenv("WEBHOOK_TRANSPORT", "websocket")
+		t.Setenv("GITHUB_TOKEN", "test-token")
+		t.Setenv("GITHUB_REPO", "")
+		t.Setenv("GITHUB_REPOS", "")
+		t.Setenv("GITHUB_ORG", "")
+		t.Setenv("GITHUB_ENTERPRISE", "")
+	}
+
+	t.Run("accepts multiple repositories", func(t *testing.T) {
+		setWebSocketConfigEnv(t)
+		t.Setenv("GITHUB_REPOS", "owner/one, owner/two")
+
+		cfg, err := NewConfig()
+		if err != nil {
+			t.Fatalf("NewConfig() error = %v", err)
+		}
+		if cfg.Vars.GitHubRepos != "owner/one, owner/two" {
+			t.Fatalf("GitHubRepos = %q, want the configured list", cfg.Vars.GitHubRepos)
+		}
+	})
+
+	t.Run("rejects malformed repository entries", func(t *testing.T) {
+		for _, repos := range []string{"owner/one,", "owner/", "/one", "owner/one/extra", "owner/ one"} {
+			t.Run(repos, func(t *testing.T) {
+				setWebSocketConfigEnv(t)
+				t.Setenv("GITHUB_REPOS", repos)
+
+				if _, err := NewConfig(); err == nil {
+					t.Fatalf("NewConfig() accepted malformed GITHUB_REPOS %q", repos)
+				}
+			})
+		}
+	})
+
+	t.Run("rejects duplicate repositories", func(t *testing.T) {
+		setWebSocketConfigEnv(t)
+		t.Setenv("GITHUB_REPOS", "owner/one, OWNER/ONE")
+
+		if _, err := NewConfig(); err == nil {
+			t.Fatal("NewConfig() accepted duplicate repositories")
+		}
+	})
+
+	t.Run("rejects multiple repository target settings", func(t *testing.T) {
+		setWebSocketConfigEnv(t)
+		t.Setenv("GITHUB_REPOS", "owner/one,owner/two")
+		t.Setenv("GITHUB_REPO", "owner/one")
+
+		if _, err := NewConfig(); err == nil {
+			t.Fatal("NewConfig() accepted both GITHUB_REPOS and GITHUB_REPO")
+		}
+	})
+}

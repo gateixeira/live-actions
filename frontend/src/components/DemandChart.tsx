@@ -54,7 +54,7 @@ export function DemandChart({ data, period, onPeriodChange }: Props) {
               key={p.value}
               onClick={() => onPeriodChange(p.value)}
               className={clsx(
-                'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
                 period === p.value
                   ? 'bg-gray-700 text-white'
                   : 'text-gray-400 hover:text-gray-200',
@@ -66,7 +66,7 @@ export function DemandChart({ data, period, onPeriodChange }: Props) {
         </div>
       </div>
 
-      <div className="h-[320px]">
+      <div className="h-[240px] sm:h-[320px]">
         {chartData.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <span className="text-sm text-gray-600">No data available for this period</span>
@@ -92,6 +92,8 @@ export function DemandChart({ data, period, onPeriodChange }: Props) {
                 tick={{ fill: '#6b7280' }}
                 axisLine={{ stroke: '#374151' }}
                 tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={40}
               />
               <YAxis
                 allowDecimals={false}

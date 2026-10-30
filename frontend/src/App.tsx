@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Search, ChevronDown } from 'lucide-react'
+import { Search, ChevronDown, Menu } from 'lucide-react'
 import { MetricsCards } from './components/MetricsCards'
 import { DemandChart } from './components/DemandChart'
 import { WorkflowTable } from './components/WorkflowTable'
 import { FailureAnalytics } from './components/FailureAnalytics'
 import { LabelDemand } from './components/LabelDemand'
+import { DashboardRepoScope } from './components/DashboardRepoScope'
 import { Sidebar } from './components/Sidebar'
 import { useSSE } from './hooks/useSSE'
 import { useThrottledLive } from './hooks/useThrottledLive'
@@ -34,12 +35,15 @@ const STATUS_OPTIONS = [
 
 export default function App() {
   const [activePage, setActivePage] = useState<Page>('dashboard')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [period, setPeriod] = useState<Period>('day')
   const [metricsData, setMetricsData] = useState<MetricsResponse | null>(null)
   const [ready, setReady] = useState(false)
   const [selectedRepo, setSelectedRepo] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
   const [repos, setRepos] = useState<string[]>([])
+  const [repoLoadState, setRepoLoadState] = useState<'loading' | 'loaded' | 'error'>('loading')
+  const [repoLoadAttempt, setRepoLoadAttempt] = useState(0)
   const [repoSearchOpen, setRepoSearchOpen] = useState(false)
   const [repoSearch, setRepoSearch] = useState('')
 
@@ -76,10 +80,20 @@ export default function App() {
 
   useEffect(() => {
     if (!ready) return
+    let cancelled = false
     getRepositories()
-      .then((r) => setRepos(r.repositories))
-      .catch((err) => console.error('Failed to load repositories', err))
-  }, [ready])
+      .then((r) => {
+        if (cancelled) return
+        setRepos(r.repositories)
+        setRepoLoadState('loaded')
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('Failed to load repositories', err)
+        setRepoLoadState('error')
+      })
+    return () => { cancelled = true }
+  }, [ready, repoLoadAttempt])
 
   const loadMetrics = useCallback(
     (p: Period) => {
@@ -122,13 +136,28 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar activePage={activePage} onNavigate={setActivePage} connected={connected} />
+      <Sidebar
+        activePage={activePage}
+        onNavigate={setActivePage}
+        connected={connected}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
       {/* Main content */}
-      <main className="ml-56 flex-1 min-h-screen">
+      <main className="min-w-0 flex-1 min-h-screen md:ml-56">
         {/* Page header */}
         <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-gray-800 bg-gray-950/80 px-4 py-2.5 backdrop-blur-sm md:h-14 md:flex-nowrap md:px-6 md:py-0">
-          <h1 className="text-base font-semibold text-white">{PAGE_TITLES[activePage]}</h1>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="-ml-1 rounded-lg p-1.5 text-gray-400 hover:bg-gray-800 hover:text-gray-200 md:hidden"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <h1 className="text-base font-semibold text-white">{PAGE_TITLES[activePage]}</h1>
+          </div>
 
           {/* Filters */}
           <div className="flex items-center gap-3">
@@ -151,6 +180,7 @@ export default function App() {
                       <input
                         type="text"
                         autoFocus
+                        aria-label="Search repositories"
                         placeholder="Search repositories..."
                         value={repoSearch}
                         onChange={(e) => setRepoSearch(e.target.value)}
@@ -173,6 +203,43 @@ export default function App() {
                           {r}
                         </button>
                       ))}
+                      {repoLoadState === 'loading' && (
+                        <p role="status" className="px-3 py-2 text-xs text-gray-400">
+                          Loading repositories…
+                        </p>
+                      )}
+                      {repoLoadState === 'error' && (
+                        <div role="alert" className="px-3 py-2 text-xs text-gray-300">
+                          <p>Could not load repositories.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRepoLoadState('loading')
+                              setRepoLoadAttempt((attempt) => attempt + 1)
+                            }}
+                            className="mt-2 rounded px-2 py-1 text-indigo-300 hover:bg-gray-700"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      )}
+                      {repoLoadState === 'loaded' && repos.length === 0 && (
+                        <p role="status" className="px-3 py-2 text-xs text-gray-400">
+                          No repositories available.
+                        </p>
+                      )}
+                      {repoLoadState === 'loaded' && repos.length > 0 && filteredRepos.length === 0 && (
+                        <div role="status" className="px-3 py-2 text-xs text-gray-400">
+                          <p>No repositories match “{repoSearch}”.</p>
+                          <button
+                            type="button"
+                            onClick={() => setRepoSearch('')}
+                            className="mt-2 rounded px-2 py-1 text-indigo-300 hover:bg-gray-700"
+                          >
+                            Clear search
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </>
@@ -195,9 +262,10 @@ export default function App() {
         </header>
 
         {/* Page content */}
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           {activePage === 'dashboard' && (
             <div className="space-y-6">
+              {selectedRepo && <DashboardRepoScope repo={selectedRepo} />}
               <MetricsCards
                 running={running}
                 queued={queued}

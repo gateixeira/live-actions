@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -28,6 +29,7 @@ type Vars struct {
 	GitHubToken      string
 	GitHubHost       string
 	GitHubRepo       string // owner/repo
+	GitHubRepos      string // comma-separated owner/repo list
 	GitHubOrg        string
 	GitHubEnterprise string // enterprise slug
 	GitHubEvents     string // comma-separated list, default "workflow_job,workflow_run"
@@ -39,6 +41,19 @@ type Config struct {
 
 // NewConfig creates and initializes a new application config.
 func NewConfig() (*Config, error) {
+	dataRetentionDays, err := getPositiveDurationEnvOrDefault("DATA_RETENTION_DAYS", 30, 24*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	cleanupIntervalHours, err := getPositiveDurationEnvOrDefault("CLEANUP_INTERVAL_HOURS", 24, time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	staleJobThresholdHours, err := getPositiveDurationEnvOrDefault("STALE_JOB_THRESHOLD_HOURS", 24, time.Hour)
+	if err != nil {
+		return nil, err
+	}
+
 	vars := Vars{
 		WebhookSecret:          os.Getenv("WEBHOOK_SECRET"),
 		Port:                   getEnvOrDefault("PORT", "8080"),
@@ -46,14 +61,15 @@ func NewConfig() (*Config, error) {
 		LogLevel:               getEnvOrDefault("LOG_LEVEL", "info"),
 		TLSEnabled:             getEnvOrDefault("TLS_ENABLED", "false") == "true",
 		Environment:            getEnvOrDefault("ENVIRONMENT", "development"),
-		DataRetentionDays:      getEnvOrDefaultInt("DATA_RETENTION_DAYS", 30),       // Default 1 month
-		CleanupIntervalHours:   getEnvOrDefaultInt("CLEANUP_INTERVAL_HOURS", 24),    // Daily cleanup
-		StaleJobThresholdHours: getEnvOrDefaultInt("STALE_JOB_THRESHOLD_HOURS", 24), // Jobs queued/in_progress longer than this are considered stale
+		DataRetentionDays:      dataRetentionDays,       // Default 1 month
+		CleanupIntervalHours:   cleanupIntervalHours,    // Daily cleanup
+		StaleJobThresholdHours: staleJobThresholdHours, // Jobs queued/in_progress longer than this are considered stale
 
 		WebhookTransport: getEnvOrDefault("WEBHOOK_TRANSPORT", "http"),
 		GitHubToken:      os.Getenv("GITHUB_TOKEN"),
 		GitHubHost:       getEnvOrDefault("GITHUB_HOST", "github.com"),
 		GitHubRepo:       os.Getenv("GITHUB_REPO"),
+		GitHubRepos:      os.Getenv("GITHUB_REPOS"),
 		GitHubOrg:        os.Getenv("GITHUB_ORG"),
 		GitHubEnterprise: os.Getenv("GITHUB_ENTERPRISE"),
 		GitHubEvents:     getEnvOrDefault("GITHUB_EVENTS", "workflow_job,workflow_run"),
@@ -82,6 +98,22 @@ func NewConfig() (*Config, error) {
 		if vars.GitHubRepo != "" {
 			set++
 		}
+		if vars.GitHubRepos != "" {
+			set++
+			seenRepos := make(map[string]struct{})
+			for _, repo := range strings.Split(vars.GitHubRepos, ",") {
+				repo = strings.TrimSpace(repo)
+				parts := strings.Split(repo, "/")
+				if len(parts) != 2 || parts[0] == "" || parts[0] != strings.TrimSpace(parts[0]) || parts[1] == "" || parts[1] != strings.TrimSpace(parts[1]) {
+					return nil, fmt.Errorf("GITHUB_REPOS must be a comma-separated list of owner/repo values")
+				}
+				repoKey := strings.ToLower(repo)
+				if _, exists := seenRepos[repoKey]; exists {
+					return nil, fmt.Errorf("GITHUB_REPOS must not contain duplicate repositories")
+				}
+				seenRepos[repoKey] = struct{}{}
+			}
+		}
 		if vars.GitHubOrg != "" {
 			set++
 		}
@@ -89,10 +121,10 @@ func NewConfig() (*Config, error) {
 			set++
 		}
 		if set == 0 {
-			return nil, fmt.Errorf("one of GITHUB_REPO, GITHUB_ORG, or GITHUB_ENTERPRISE is required when WEBHOOK_TRANSPORT=websocket")
+			return nil, fmt.Errorf("one of GITHUB_REPO, GITHUB_REPOS, GITHUB_ORG, or GITHUB_ENTERPRISE is required when WEBHOOK_TRANSPORT=websocket")
 		}
 		if set > 1 {
-			return nil, fmt.Errorf("set only one of GITHUB_REPO, GITHUB_ORG, and GITHUB_ENTERPRISE")
+			return nil, fmt.Errorf("set only one of GITHUB_REPO, GITHUB_REPOS, GITHUB_ORG, and GITHUB_ENTERPRISE")
 		}
 	}
 
@@ -106,14 +138,25 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvOrDefaultInt gets an environment variable as an integer or returns the default value
-func getEnvOrDefaultInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
+// getPositiveDurationEnvOrDefault parses a positive integer duration and checks
+// that converting it to time.Duration cannot overflow. An unset variable uses
+// the supplied default.
+func getPositiveDurationEnvOrDefault(key string, defaultValue int, unit time.Duration) (int, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return defaultValue, nil
 	}
-	return defaultValue
+
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer, got %q", key, raw)
+	}
+
+	maxValue := int64((1<<63 - 1) / int64(unit))
+	if int64(value) > maxValue {
+		return 0, fmt.Errorf("%s exceeds the maximum duration value of %d", key, maxValue)
+	}
+	return value, nil
 }
 
 func (c *Config) GetDatabasePath() string {
