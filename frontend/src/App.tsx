@@ -175,7 +175,7 @@ export default function App() {
               {repoSearchOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => { setRepoSearchOpen(false); setRepoSearch('') }} />
-                  <div className="absolute right-0 top-full z-20 mt-1 w-[calc(100vw-2rem)] max-w-[16rem] overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow-xl">
+                  <div className="absolute left-0 top-full z-20 mt-1 w-[calc(100vw-2rem)] max-w-[16rem] overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow-xl md:left-auto md:right-0">
                     <div className="border-b border-gray-700 p-2">
                       <input
                         type="text"
