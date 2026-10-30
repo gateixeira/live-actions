@@ -5,6 +5,7 @@ import { DemandChart } from './components/DemandChart'
 import { WorkflowTable } from './components/WorkflowTable'
 import { FailureAnalytics } from './components/FailureAnalytics'
 import { LabelDemand } from './components/LabelDemand'
+import { DashboardRepoScope } from './components/DashboardRepoScope'
 import { Sidebar } from './components/Sidebar'
 import { useSSE } from './hooks/useSSE'
 import { useThrottledLive } from './hooks/useThrottledLive'
@@ -248,6 +249,7 @@ export default function App() {
         <div className="p-6">
           {activePage === 'dashboard' && (
             <div className="space-y-6">
+              {selectedRepo && <DashboardRepoScope repo={selectedRepo} />}
               <MetricsCards
                 running={running}
                 queued={queued}
