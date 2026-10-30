@@ -147,7 +147,7 @@ export default function App() {
       {/* Main content */}
       <main className="min-w-0 flex-1 min-h-screen md:ml-56">
         {/* Page header */}
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-800 bg-gray-950/80 px-6 backdrop-blur-sm">
+        <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-gray-800 bg-gray-950/80 px-4 py-2.5 backdrop-blur-sm md:h-14 md:flex-nowrap md:px-6 md:py-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -175,7 +175,7 @@ export default function App() {
               {repoSearchOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => { setRepoSearchOpen(false); setRepoSearch('') }} />
-                  <div className="absolute right-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow-xl">
+                  <div className="absolute left-0 top-full z-20 mt-1 w-[calc(100vw-2rem)] max-w-[16rem] overflow-hidden rounded-lg border border-gray-700 bg-gray-800 shadow-xl md:left-auto md:right-0">
                     <div className="border-b border-gray-700 p-2">
                       <input
                         type="text"
