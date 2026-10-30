@@ -39,6 +39,19 @@ type Config struct {
 
 // NewConfig creates and initializes a new application config.
 func NewConfig() (*Config, error) {
+	dataRetentionDays, err := getPositiveDurationEnvOrDefault("DATA_RETENTION_DAYS", 30, 24*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	cleanupIntervalHours, err := getPositiveDurationEnvOrDefault("CLEANUP_INTERVAL_HOURS", 24, time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	staleJobThresholdHours, err := getPositiveDurationEnvOrDefault("STALE_JOB_THRESHOLD_HOURS", 24, time.Hour)
+	if err != nil {
+		return nil, err
+	}
+
 	vars := Vars{
 		WebhookSecret:          os.Getenv("WEBHOOK_SECRET"),
 		Port:                   getEnvOrDefault("PORT", "8080"),
@@ -46,9 +59,9 @@ func NewConfig() (*Config, error) {
 		LogLevel:               getEnvOrDefault("LOG_LEVEL", "info"),
 		TLSEnabled:             getEnvOrDefault("TLS_ENABLED", "false") == "true",
 		Environment:            getEnvOrDefault("ENVIRONMENT", "development"),
-		DataRetentionDays:      getEnvOrDefaultInt("DATA_RETENTION_DAYS", 30),       // Default 1 month
-		CleanupIntervalHours:   getEnvOrDefaultInt("CLEANUP_INTERVAL_HOURS", 24),    // Daily cleanup
-		StaleJobThresholdHours: getEnvOrDefaultInt("STALE_JOB_THRESHOLD_HOURS", 24), // Jobs queued/in_progress longer than this are considered stale
+		DataRetentionDays:      dataRetentionDays,       // Default 1 month
+		CleanupIntervalHours:   cleanupIntervalHours,    // Daily cleanup
+		StaleJobThresholdHours: staleJobThresholdHours, // Jobs queued/in_progress longer than this are considered stale
 
 		WebhookTransport: getEnvOrDefault("WEBHOOK_TRANSPORT", "http"),
 		GitHubToken:      os.Getenv("GITHUB_TOKEN"),
@@ -106,14 +119,25 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvOrDefaultInt gets an environment variable as an integer or returns the default value
-func getEnvOrDefaultInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
+// getPositiveDurationEnvOrDefault parses a positive integer duration and checks
+// that converting it to time.Duration cannot overflow. An unset variable uses
+// the supplied default.
+func getPositiveDurationEnvOrDefault(key string, defaultValue int, unit time.Duration) (int, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return defaultValue, nil
 	}
-	return defaultValue
+
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer, got %q", key, raw)
+	}
+
+	maxValue := int64((1<<63 - 1) / int64(unit))
+	if int64(value) > maxValue {
+		return 0, fmt.Errorf("%s exceeds the maximum duration value of %d", key, maxValue)
+	}
+	return value, nil
 }
 
 func (c *Config) GetDatabasePath() string {
