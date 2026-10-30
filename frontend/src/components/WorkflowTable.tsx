@@ -228,7 +228,8 @@ export function WorkflowTable({ ready, refreshSignal, repo, status }: { ready: b
       </div>
 
       <div className="overflow-hidden rounded-xl border border-gray-800 bg-gray-900">
-        <table className="w-full text-left">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left">
           <thead>
             <tr className="border-b border-gray-800 bg-gray-800/40 text-xs font-medium text-gray-500 uppercase tracking-wider">
               <th className="w-8 py-3 pl-4 pr-1" />
@@ -259,6 +260,7 @@ export function WorkflowTable({ ready, refreshSignal, repo, status }: { ready: b
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )
