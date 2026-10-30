@@ -819,3 +819,45 @@ func TestValidateSSEOrigin_DefaultPortNormalization(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 }
+
+func TestGetRepositoriesIncludesConfiguredRepositories(t *testing.T) {
+	_, mockDB, testConfig := setupAPITest()
+	testConfig.Vars.GitHubRepos = "owner/two, owner/three,owner/two"
+	mockDB.On("GetRepositories", mock.Anything).Return([]string{"owner/two", "owner/one"}, nil).Once()
+
+	handler := NewAPIHandler(testConfig, mockDB)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/repositories", nil)
+
+	handler.GetRepositories()(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var response struct {
+		Repositories []string `json:"repositories"`
+	}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, []string{"owner/one", "owner/three", "owner/two"}, response.Repositories)
+	mockDB.AssertExpectations(t)
+}
+
+func TestGetRepositoriesIncludesConfiguredSingleRepository(t *testing.T) {
+	_, mockDB, testConfig := setupAPITest()
+	testConfig.Vars.GitHubRepo = "owner/configured"
+	mockDB.On("GetRepositories", mock.Anything).Return([]string{}, nil).Once()
+
+	handler := NewAPIHandler(testConfig, mockDB)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/repositories", nil)
+
+	handler.GetRepositories()(c)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var response struct {
+		Repositories []string `json:"repositories"`
+	}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, []string{"owner/configured"}, response.Repositories)
+	mockDB.AssertExpectations(t)
+}

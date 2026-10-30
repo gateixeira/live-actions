@@ -98,9 +98,10 @@ The UI updates in real time via Server-Sent Events — no manual refresh needed.
 | `CLEANUP_INTERVAL_HOURS` | `24` | How often to run data cleanup |
 | `WEBHOOK_TRANSPORT` | `http` | How webhooks reach the app: `http` (public endpoint) or `websocket` (relay, no public endpoint needed) |
 | `GITHUB_TOKEN` | *(required for `websocket`)* | Token with `admin:repo_hook` (per-repo) or `admin:org_hook` (per-org) scope. `gh auth token` works. |
-| `GITHUB_REPO` | | `owner/repo` to subscribe to. Mutually exclusive with `GITHUB_ORG` and `GITHUB_ENTERPRISE`. |
-| `GITHUB_ORG` | | Org login to subscribe to. Mutually exclusive with `GITHUB_REPO` and `GITHUB_ENTERPRISE`. |
-| `GITHUB_ENTERPRISE` | | Enterprise slug to subscribe to. Mutually exclusive with `GITHUB_REPO` and `GITHUB_ORG`. See enterprise caveat below. |
+| `GITHUB_REPO` | | `owner/repo` to subscribe to. Mutually exclusive with `GITHUB_REPOS`, `GITHUB_ORG`, and `GITHUB_ENTERPRISE`. |
+| `GITHUB_REPOS` | | Comma-separated `owner/repo` values for multiple repository subscriptions. Mutually exclusive with `GITHUB_REPO`, `GITHUB_ORG`, and `GITHUB_ENTERPRISE`. |
+| `GITHUB_ORG` | | Org login to subscribe to. Mutually exclusive with `GITHUB_REPO`, `GITHUB_REPOS`, and `GITHUB_ENTERPRISE`. |
+| `GITHUB_ENTERPRISE` | | Enterprise slug to subscribe to. Mutually exclusive with `GITHUB_REPO`, `GITHUB_REPOS`, and `GITHUB_ORG`. See enterprise caveat below. |
 | `GITHUB_EVENTS` | `workflow_run,workflow_job` | Comma-separated event types for the WebSocket subscription (use `*` for all). |
 | `GITHUB_HOST` | `github.com` | GitHub host. Use your `<customer>.ghe.com` subdomain for Enterprise Cloud with data residency, or your GHES hostname for GitHub Enterprise Server. |
 
@@ -167,6 +168,24 @@ export GITHUB_TOKEN=$(gh auth token)   # needs admin:org_hook scope
 export GITHUB_ORG=my-org
 make run
 ```
+
+**All repositories in a personal account:**
+
+Personal accounts do not have an account-level webhook, so the app creates one
+temporary WebSocket subscription per repository. The token must be able to list
+your repositories and manage repository webhooks on each one.
+
+```bash
+export WEBHOOK_TRANSPORT=websocket
+export GITHUB_TOKEN=$(gh auth token)
+export GITHUB_REPOS=$(gh repo list --limit 1000 --json nameWithOwner --jq '[.[].nameWithOwner] | join(",")')
+make run
+```
+
+The subscriptions are removed on graceful shutdown. Only workflow events
+received while the app is running are stored; historical runs are not
+backfilled automatically. Configured repositories appear in the repository
+filter immediately, even before their first workflow event.
 
 **Per-enterprise:**
 

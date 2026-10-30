@@ -5,7 +5,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gateixeira/live-actions/internal/config"
@@ -376,7 +378,31 @@ func (h *APIHandler) GetRepositories() gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve repositories"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"repositories": repos})
+
+		seen := make(map[string]struct{}, len(repos))
+		allRepos := make([]string, 0, len(repos)+1)
+		addRepo := func(repo string) {
+			repo = strings.TrimSpace(repo)
+			if repo == "" {
+				return
+			}
+			if _, exists := seen[repo]; exists {
+				return
+			}
+			seen[repo] = struct{}{}
+			allRepos = append(allRepos, repo)
+		}
+		for _, repo := range repos {
+			addRepo(repo)
+		}
+		if h.config != nil {
+			addRepo(h.config.Vars.GitHubRepo)
+			for _, repo := range strings.Split(h.config.Vars.GitHubRepos, ",") {
+				addRepo(repo)
+			}
+		}
+		sort.Strings(allRepos)
+		c.JSON(http.StatusOK, gin.H{"repositories": allRepos})
 	}
 }
 

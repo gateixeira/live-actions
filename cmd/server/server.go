@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gateixeira/live-actions/handlers"
@@ -164,27 +165,34 @@ func SetupAndRun(staticFS embed.FS) {
 		wsDone   = make(chan struct{})
 	)
 	if cfg.Vars.WebhookTransport == "websocket" {
-		sub, err := ghws.NewSubscriber(ghws.Config{
-			Token:      cfg.Vars.GitHubToken,
-			Host:       cfg.Vars.GitHubHost,
-			Repo:       cfg.Vars.GitHubRepo,
-			Org:        cfg.Vars.GitHubOrg,
-			Enterprise: cfg.Vars.GitHubEnterprise,
-			Events:     splitEvents(cfg.Vars.GitHubEvents),
-			Secret:     cfg.Vars.WebhookSecret,
-		}, ingestAdapter{h: webhookHandler})
-		if err != nil {
-			logger.Logger.Fatal("Invalid WebSocket subscriber config", zap.Error(err))
+		subscriberConfigs := websocketSubscriberConfigs(cfg.Vars)
+		subscribers := make([]*ghws.Subscriber, 0, len(subscriberConfigs))
+		for _, subscriberConfig := range subscriberConfigs {
+			sub, err := ghws.NewSubscriber(subscriberConfig, ingestAdapter{h: webhookHandler})
+			if err != nil {
+				logger.Logger.Fatal("Invalid WebSocket subscriber config", zap.String("repo", subscriberConfig.Repo), zap.Error(err))
+			}
+			subscribers = append(subscribers, sub)
 		}
+
 		var wsCtx context.Context
 		wsCtx, wsCancel = context.WithCancel(context.Background())
+		var wsWG sync.WaitGroup
+		for _, sub := range subscribers {
+			wsWG.Add(1)
+			go func(sub *ghws.Subscriber) {
+				defer wsWG.Done()
+				if err := sub.Run(wsCtx); err != nil && !errors.Is(err, context.Canceled) {
+					logger.Logger.Error("WebSocket subscriber exited with error", zap.Error(err))
+				}
+			}(sub)
+		}
 		go func() {
-			defer close(wsDone)
-			if err := sub.Run(wsCtx); err != nil && !errors.Is(err, context.Canceled) {
-				logger.Logger.Error("WebSocket subscriber exited with error", zap.Error(err))
-			}
+			wsWG.Wait()
+			close(wsDone)
 		}()
 		logger.Logger.Info("WebSocket transport enabled",
+			zap.Int("subscription_count", len(subscriberConfigs)),
 			zap.String("repo", cfg.Vars.GitHubRepo),
 			zap.String("org", cfg.Vars.GitHubOrg),
 			zap.String("enterprise", cfg.Vars.GitHubEnterprise),
@@ -246,4 +254,33 @@ func splitEvents(s string) []string {
 		}
 	}
 	return out
+}
+
+func websocketSubscriberConfigs(vars config.Vars) []ghws.Config {
+	base := ghws.Config{
+		Token:  vars.GitHubToken,
+		Host:   vars.GitHubHost,
+		Events: splitEvents(vars.GitHubEvents),
+		Secret: vars.WebhookSecret,
+	}
+
+	if vars.GitHubRepos != "" {
+		repos := strings.Split(vars.GitHubRepos, ",")
+		configs := make([]ghws.Config, 0, len(repos))
+		for _, repo := range repos {
+			repoConfig := base
+			repoConfig.Repo = strings.TrimSpace(repo)
+			configs = append(configs, repoConfig)
+		}
+		return configs
+	}
+
+	if vars.GitHubRepo != "" {
+		base.Repo = vars.GitHubRepo
+		return []ghws.Config{base}
+	}
+
+	base.Org = vars.GitHubOrg
+	base.Enterprise = vars.GitHubEnterprise
+	return []ghws.Config{base}
 }

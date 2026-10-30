@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -28,6 +29,7 @@ type Vars struct {
 	GitHubToken      string
 	GitHubHost       string
 	GitHubRepo       string // owner/repo
+	GitHubRepos      string // comma-separated owner/repo list
 	GitHubOrg        string
 	GitHubEnterprise string // enterprise slug
 	GitHubEvents     string // comma-separated list, default "workflow_job,workflow_run"
@@ -67,6 +69,7 @@ func NewConfig() (*Config, error) {
 		GitHubToken:      os.Getenv("GITHUB_TOKEN"),
 		GitHubHost:       getEnvOrDefault("GITHUB_HOST", "github.com"),
 		GitHubRepo:       os.Getenv("GITHUB_REPO"),
+		GitHubRepos:      os.Getenv("GITHUB_REPOS"),
 		GitHubOrg:        os.Getenv("GITHUB_ORG"),
 		GitHubEnterprise: os.Getenv("GITHUB_ENTERPRISE"),
 		GitHubEvents:     getEnvOrDefault("GITHUB_EVENTS", "workflow_job,workflow_run"),
@@ -95,6 +98,22 @@ func NewConfig() (*Config, error) {
 		if vars.GitHubRepo != "" {
 			set++
 		}
+		if vars.GitHubRepos != "" {
+			set++
+			seenRepos := make(map[string]struct{})
+			for _, repo := range strings.Split(vars.GitHubRepos, ",") {
+				repo = strings.TrimSpace(repo)
+				parts := strings.Split(repo, "/")
+				if len(parts) != 2 || parts[0] == "" || parts[0] != strings.TrimSpace(parts[0]) || parts[1] == "" || parts[1] != strings.TrimSpace(parts[1]) {
+					return nil, fmt.Errorf("GITHUB_REPOS must be a comma-separated list of owner/repo values")
+				}
+				repoKey := strings.ToLower(repo)
+				if _, exists := seenRepos[repoKey]; exists {
+					return nil, fmt.Errorf("GITHUB_REPOS must not contain duplicate repositories")
+				}
+				seenRepos[repoKey] = struct{}{}
+			}
+		}
 		if vars.GitHubOrg != "" {
 			set++
 		}
@@ -102,10 +121,10 @@ func NewConfig() (*Config, error) {
 			set++
 		}
 		if set == 0 {
-			return nil, fmt.Errorf("one of GITHUB_REPO, GITHUB_ORG, or GITHUB_ENTERPRISE is required when WEBHOOK_TRANSPORT=websocket")
+			return nil, fmt.Errorf("one of GITHUB_REPO, GITHUB_REPOS, GITHUB_ORG, or GITHUB_ENTERPRISE is required when WEBHOOK_TRANSPORT=websocket")
 		}
 		if set > 1 {
-			return nil, fmt.Errorf("set only one of GITHUB_REPO, GITHUB_ORG, and GITHUB_ENTERPRISE")
+			return nil, fmt.Errorf("set only one of GITHUB_REPO, GITHUB_REPOS, GITHUB_ORG, and GITHUB_ENTERPRISE")
 		}
 	}
 
