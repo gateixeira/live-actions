@@ -48,6 +48,9 @@ type DatabaseInterface interface {
 	GetLabelDemandSummary(ctx context.Context, since time.Duration, repo string) ([]models.LabelDemandSummary, error)
 	GetLabelDemandTrend(ctx context.Context, since time.Duration, repo string) ([]models.LabelDemandTrendPoint, error)
 	GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJobCount, error)
+
+	// Runner Stats
+	GetRunnerStats(ctx context.Context, since time.Duration, repo string) ([]models.RunnerStats, error)
 }
 
 // DBWrapper wraps separate read and write *sql.DB handles to the same SQLite

@@ -3,10 +3,11 @@ import {
   LayoutDashboard,
   AlertTriangle,
   Tags,
+  Server,
   Zap,
 } from 'lucide-react'
 
-type Page = 'dashboard' | 'failures' | 'labels'
+type Page = 'dashboard' | 'failures' | 'labels' | 'runners'
 
 interface SidebarProps {
   activePage: Page
@@ -22,6 +23,7 @@ const NAV_ITEMS: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'failures', label: 'Failures', icon: AlertTriangle },
   { id: 'labels', label: 'Runner Labels', icon: Tags },
+  { id: 'runners', label: 'Runners', icon: Server },
 ]
 
 export function Sidebar({ activePage, onNavigate, connected, open, onClose }: SidebarProps) {
