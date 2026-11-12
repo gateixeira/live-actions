@@ -40,6 +40,11 @@ type WorkflowJob struct {
 	StartedAt   time.Time `json:"started_at"`
 	CompletedAt time.Time `json:"completed_at"`
 	RunID       int64     `json:"run_id" binding:"required"`
+
+	// RunnerName and RunnerGroupName are null in the webhook payload until a
+	// runner picks up the job, so they decode to "" for queued jobs.
+	RunnerName      string `json:"runner_name"`
+	RunnerGroupName string `json:"runner_group_name"`
 }
 
 type WorkflowRun struct {
@@ -181,4 +186,21 @@ type LabelDemandTrendPoint struct {
 	Timestamp int64  `json:"timestamp"`
 	Label     string `json:"label"`
 	Count     int    `json:"count"`
+}
+
+// RunnerStats represents aggregate job statistics for a single runner.
+// Job counts and AvgDurationSeconds cover jobs completed within the requested
+// period; Running counts jobs currently in progress on the runner.
+type RunnerStats struct {
+	RunnerName         string     `json:"runner_name"`
+	RunnerGroupName    string     `json:"runner_group_name"`
+	TotalJobs          int        `json:"total_jobs"`
+	Succeeded          int        `json:"succeeded"`
+	Failed             int        `json:"failed"`
+	Cancelled          int        `json:"cancelled"`
+	Other              int        `json:"other"`
+	FailureRate        float64    `json:"failure_rate"`
+	AvgDurationSeconds float64    `json:"avg_duration_seconds"`
+	Running            int        `json:"running"`
+	LastJobAt          *time.Time `json:"last_job_at"`
 }

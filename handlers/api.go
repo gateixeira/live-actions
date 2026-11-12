@@ -369,6 +369,26 @@ func (h *APIHandler) GetLabelDemand() gin.HandlerFunc {
 	}
 }
 
+// GetRunnerStats returns per-runner job statistics.
+func (h *APIHandler) GetRunnerStats() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		period := c.DefaultQuery("period", "day")
+		since := periodToDuration(period)
+		repo := c.Query("repo")
+
+		summary, err := h.db.GetRunnerStats(c.Request.Context(), since, repo)
+		if err != nil {
+			logger.Logger.Error("Failed to get runner stats", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve runner stats"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"summary": summary,
+		})
+	}
+}
+
 // GetRepositories returns the list of distinct repository names.
 func (h *APIHandler) GetRepositories() gin.HandlerFunc {
 	return func(c *gin.Context) {

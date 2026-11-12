@@ -18,6 +18,7 @@ vi.mock('./components/DemandChart', () => ({ DemandChart: () => null }))
 vi.mock('./components/WorkflowTable', () => ({ WorkflowTable: () => null }))
 vi.mock('./components/FailureAnalytics', () => ({ FailureAnalytics: () => null }))
 vi.mock('./components/LabelDemand', () => ({ LabelDemand: () => null }))
+vi.mock('./components/RunnerStats', () => ({ RunnerStats: () => null }))
 
 function deferred<T>() {
   let resolve!: (value: T) => void

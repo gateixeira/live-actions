@@ -5,6 +5,7 @@ import { DemandChart } from './components/DemandChart'
 import { WorkflowTable } from './components/WorkflowTable'
 import { FailureAnalytics } from './components/FailureAnalytics'
 import { LabelDemand } from './components/LabelDemand'
+import { RunnerStats } from './components/RunnerStats'
 import { DashboardRepoScope } from './components/DashboardRepoScope'
 import { Sidebar } from './components/Sidebar'
 import { useSSE } from './hooks/useSSE'
@@ -13,12 +14,13 @@ import { usePausableLive } from './hooks/usePausableLive'
 import { getMetrics, getRepositories, initCsrf } from './api/client'
 import type { MetricsResponse, Period } from './api/types'
 
-type Page = 'dashboard' | 'failures' | 'labels'
+type Page = 'dashboard' | 'failures' | 'labels' | 'runners'
 
 const PAGE_TITLES: Record<Page, string> = {
   dashboard: 'Dashboard',
   failures: 'Failure Analytics',
   labels: 'Runner Labels',
+  runners: 'Runners',
 }
 
 const STATUS_OPTIONS = [
@@ -309,6 +311,10 @@ export default function App() {
 
           {activePage === 'labels' && (
             <LabelDemand ready={ready} repo={selectedRepo} />
+          )}
+
+          {activePage === 'runners' && (
+            <RunnerStats ready={ready} repo={selectedRepo} />
           )}
         </div>
       </main>

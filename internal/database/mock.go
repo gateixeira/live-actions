@@ -117,6 +117,11 @@ func (m *MockDatabase) GetCurrentJobCountsByLabel(ctx context.Context) ([]LabelJ
 	return args.Get(0).([]LabelJobCount), args.Error(1)
 }
 
+func (m *MockDatabase) GetRunnerStats(ctx context.Context, since time.Duration, repo string) ([]models.RunnerStats, error) {
+	args := m.Called(ctx, since, repo)
+	return args.Get(0).([]models.RunnerStats), args.Error(1)
+}
+
 func (m *MockDatabase) GetRepositories(ctx context.Context) ([]string, error) {
 	args := m.Called(ctx)
 	return args.Get(0).([]string), args.Error(1)

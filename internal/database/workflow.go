@@ -99,9 +99,11 @@ func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.Work
 		}
 	}
 
+	// runner_name / runner_group_name are only known once a runner picks up
+	// the job, so a later event without them must not blank the stored values.
 	_, err = tx.Exec(
-		`INSERT INTO workflow_jobs (id, name, status, labels, html_url, conclusion, created_at, started_at, completed_at, updated_at, run_id) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+		`INSERT INTO workflow_jobs (id, name, status, labels, html_url, conclusion, created_at, started_at, completed_at, updated_at, run_id, runner_name, runner_group_name)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET
 			name = excluded.name,
 			status = excluded.status,
@@ -112,9 +114,12 @@ func (db *DBWrapper) AddOrUpdateJob(ctx context.Context, workflowJob models.Work
 			started_at = excluded.started_at,
 			completed_at = excluded.completed_at,
 			updated_at = datetime('now'),
-			run_id = excluded.run_id`,
+			run_id = excluded.run_id,
+			runner_name = COALESCE(NULLIF(excluded.runner_name, ''), workflow_jobs.runner_name),
+			runner_group_name = COALESCE(NULLIF(excluded.runner_group_name, ''), workflow_jobs.runner_group_name)`,
 		workflowJob.ID, string(workflowJob.Name), string(workflowJob.Status), labelsToJSON(workflowJob.Labels),
 		workflowJob.HtmlUrl, string(workflowJob.Conclusion), workflowJob.CreatedAt.Format(time.RFC3339), formatNullableTime(workflowJob.StartedAt), formatNullableTime(workflowJob.CompletedAt), workflowJob.RunID,
+		workflowJob.RunnerName, workflowJob.RunnerGroupName,
 	)
 
 	if err != nil {
@@ -290,7 +295,7 @@ func (db *DBWrapper) GetRepositories(ctx context.Context) ([]string, error) {
 }
 
 func (db *DBWrapper) GetWorkflowJobsByRunID(ctx context.Context, runID int64) ([]models.WorkflowJob, error) {
-	rows, err := db.readDB.QueryContext(ctx, "SELECT id, name, run_id, status, labels, html_url, conclusion, created_at, started_at, completed_at FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
+	rows, err := db.readDB.QueryContext(ctx, "SELECT id, name, run_id, status, labels, html_url, conclusion, created_at, started_at, completed_at, runner_name, runner_group_name FROM workflow_jobs WHERE run_id = ? ORDER BY created_at DESC", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +308,8 @@ func (db *DBWrapper) GetWorkflowJobsByRunID(ctx context.Context, runID int64) ([
 		var createdAt string
 		var htmlUrl sql.NullString
 		var startedAt, completedAt sql.NullString
-		if err := rows.Scan(&job.ID, &job.Name, &job.RunID, &job.Status, &labelsJSON, &htmlUrl, &job.Conclusion, &createdAt, &startedAt, &completedAt); err != nil {
+		var runnerName, runnerGroupName sql.NullString
+		if err := rows.Scan(&job.ID, &job.Name, &job.RunID, &job.Status, &labelsJSON, &htmlUrl, &job.Conclusion, &createdAt, &startedAt, &completedAt, &runnerName, &runnerGroupName); err != nil {
 			return nil, err
 		}
 		job.Labels = labelsFromJSON(labelsJSON)
@@ -311,6 +317,8 @@ func (db *DBWrapper) GetWorkflowJobsByRunID(ctx context.Context, runID int64) ([
 		job.CreatedAt = parseTime(createdAt)
 		job.StartedAt = parseTime(startedAt.String)
 		job.CompletedAt = parseTime(completedAt.String)
+		job.RunnerName = runnerName.String
+		job.RunnerGroupName = runnerGroupName.String
 		jobs = append(jobs, job)
 	}
 
@@ -328,15 +336,16 @@ func (db *DBWrapper) GetWorkflowJobByID(ctx context.Context, jobID int64) (model
 	var createdAt string
 	var htmlUrl sql.NullString
 	var startedAt, completedAt sql.NullString
+	var runnerName, runnerGroupName sql.NullString
 
 	err := db.readDB.QueryRowContext(ctx, `
-		SELECT id, name, run_id, status, labels, html_url, conclusion, 
-			   created_at, started_at, completed_at 
+		SELECT id, name, run_id, status, labels, html_url, conclusion,
+			   created_at, started_at, completed_at, runner_name, runner_group_name
 		FROM workflow_jobs 
 		WHERE id = ?`, jobID).Scan(
 		&job.ID, &job.Name, &job.RunID, &job.Status,
 		&labelsJSON, &htmlUrl, &job.Conclusion, &createdAt,
-		&startedAt, &completedAt)
+		&startedAt, &completedAt, &runnerName, &runnerGroupName)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -350,6 +359,8 @@ func (db *DBWrapper) GetWorkflowJobByID(ctx context.Context, jobID int64) (model
 	job.CreatedAt = parseTime(createdAt)
 	job.StartedAt = parseTime(startedAt.String)
 	job.CompletedAt = parseTime(completedAt.String)
+	job.RunnerName = runnerName.String
+	job.RunnerGroupName = runnerGroupName.String
 
 	return job, nil
 }

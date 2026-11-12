@@ -4,6 +4,7 @@ import type {
   MetricsResponse,
   FailureAnalyticsResponse,
   LabelDemandResponse,
+  RunnerStatsResponse,
   RepositoriesResponse,
   Period,
 } from './types'
@@ -93,6 +94,13 @@ export async function getLabelDemand(
   repo = '',
 ): Promise<LabelDemandResponse> {
   return fetchJson(`/api/analytics/labels?period=${period}${repoParam(repo)}`)
+}
+
+export async function getRunnerStats(
+  period: Period,
+  repo = '',
+): Promise<RunnerStatsResponse> {
+  return fetchJson(`/api/analytics/runners?period=${period}${repoParam(repo)}`)
 }
 
 export async function getRepositories(): Promise<RepositoriesResponse> {

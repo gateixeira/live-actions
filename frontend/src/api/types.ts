@@ -30,6 +30,8 @@ export interface WorkflowJob {
   started_at: string
   completed_at: string
   run_id: number
+  runner_name: string
+  runner_group_name: string
 }
 
 export interface Pagination {
@@ -134,6 +136,25 @@ export interface LabelDemandTrendPoint {
 export interface LabelDemandResponse {
   summary: LabelDemandSummary[]
   trend: LabelDemandTrendPoint[]
+}
+
+export interface RunnerStatsSummary {
+  runner_name: string
+  runner_group_name: string
+  total_jobs: number
+  succeeded: number
+  failed: number
+  cancelled: number
+  other: number
+  /** failed / total_jobs, 0..1 */
+  failure_rate: number
+  avg_duration_seconds: number
+  running: number
+  last_job_at: string | null
+}
+
+export interface RunnerStatsResponse {
+  summary: RunnerStatsSummary[]
 }
 
 export interface RepositoriesResponse {

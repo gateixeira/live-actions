@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, ExternalLink, Loader2 } from 'lucide-react'
 import { StatusBadge } from './StatusBadge'
 import type { WorkflowRun, WorkflowJob, Pagination as PaginationData } from '../api/types'
 import { getWorkflowRuns, getWorkflowJobs } from '../api/client'
+import { relativeTime } from '../utils/format'
 
 const MAX_TEXT_LEN = 50
 function truncate(text: string): string {
@@ -24,20 +25,6 @@ function duration(start?: string, end?: string, status?: string): string {
   if (min < 60) return `${min}m ${remSec}s`
   const hr = Math.floor(min / 60)
   return `${hr}h ${min % 60}m`
-}
-
-function relativeTime(dateStr: string): string {
-  const now = Date.now()
-  const then = new Date(dateStr).getTime()
-  const diffMs = now - then
-  const seconds = Math.floor(diffMs / 1000)
-  if (seconds < 60) return 'just now'
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 function JobRow({ job }: { job: WorkflowJob }) {
@@ -62,6 +49,14 @@ function JobRow({ job }: { job: WorkflowJob }) {
         <StatusBadge status={job.status} conclusion={job.conclusion} />
       </td>
       <td className="py-2 px-3">
+        {job.runner_name && (
+          <div
+            className="mb-1 text-xs font-medium text-gray-300"
+            title={job.runner_group_name ? `Runner group: ${job.runner_group_name}` : undefined}
+          >
+            {job.runner_name}
+          </div>
+        )}
         <div className="flex flex-wrap gap-1">
           {job.labels?.map((label) => (
             <span

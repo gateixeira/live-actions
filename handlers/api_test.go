@@ -861,3 +861,93 @@ func TestGetRepositoriesIncludesConfiguredSingleRepository(t *testing.T) {
 	assert.Equal(t, []string{"owner/configured"}, response.Repositories)
 	mockDB.AssertExpectations(t)
 }
+
+func TestGetRunnerStats_Success(t *testing.T) {
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
+
+	lastJob := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	stats := []models.RunnerStats{
+		{
+			RunnerName:         "runner-a",
+			RunnerGroupName:    "Default",
+			TotalJobs:          4,
+			Succeeded:          2,
+			Failed:             1,
+			Cancelled:          1,
+			FailureRate:        0.25,
+			AvgDurationSeconds: 75,
+			Running:            1,
+			LastJobAt:          &lastJob,
+		},
+		{RunnerName: "runner-b", Running: 1},
+	}
+	mockDB.On("GetRunnerStats", mock.Anything, 7*24*time.Hour, "owner/repo").Return(stats, nil)
+
+	router.GET("/api/analytics/runners", handler.GetRunnerStats())
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/analytics/runners?period=week&repo=owner%2Frepo", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response struct {
+		Summary []map[string]interface{} `json:"summary"`
+	}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	if assert.Len(t, response.Summary, 2) {
+		a := response.Summary[0]
+		assert.Equal(t, "runner-a", a["runner_name"])
+		assert.Equal(t, "Default", a["runner_group_name"])
+		assert.Equal(t, float64(4), a["total_jobs"])
+		assert.Equal(t, float64(2), a["succeeded"])
+		assert.Equal(t, float64(1), a["failed"])
+		assert.Equal(t, float64(1), a["cancelled"])
+		assert.Equal(t, float64(0), a["other"])
+		assert.Equal(t, 0.25, a["failure_rate"])
+		assert.Equal(t, float64(75), a["avg_duration_seconds"])
+		assert.Equal(t, float64(1), a["running"])
+		assert.Equal(t, "2026-01-02T03:04:05Z", a["last_job_at"])
+
+		b := response.Summary[1]
+		assert.Contains(t, b, "last_job_at")
+		assert.Nil(t, b["last_job_at"])
+	}
+
+	mockDB.AssertExpectations(t)
+}
+
+func TestGetRunnerStats_DefaultsToDayAndEmptyList(t *testing.T) {
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
+
+	mockDB.On("GetRunnerStats", mock.Anything, 24*time.Hour, "").Return([]models.RunnerStats{}, nil)
+
+	router.GET("/api/analytics/runners", handler.GetRunnerStats())
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/analytics/runners", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.JSONEq(t, `{"summary":[]}`, w.Body.String())
+	mockDB.AssertExpectations(t)
+}
+
+func TestGetRunnerStats_DatabaseError(t *testing.T) {
+	router, mockDB, testConfig := setupAPITest()
+	handler := NewAPIHandler(testConfig, mockDB)
+
+	mockDB.On("GetRunnerStats", mock.Anything, time.Hour, "").Return([]models.RunnerStats{}, errors.New("database error"))
+
+	router.GET("/api/analytics/runners", handler.GetRunnerStats())
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/analytics/runners?period=hour", nil)
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "Failed to retrieve runner stats")
+	mockDB.AssertExpectations(t)
+}
